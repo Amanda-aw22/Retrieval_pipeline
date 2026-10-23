@@ -29,8 +29,9 @@ The public artifact intentionally removes ACS browser-based downloading because 
 | `chem` | `cof` / `mof` / `zif` | COF is the main benchmark; MOF/ZIF are chemistry transfer checks |
 | `ad` | `amyloid` default | preliminary biomedical transfer check |
 | `cs` | `prompt` default | query generation + retrieval only |
+| `polymer` | `disulfide` / `battery` | self-healing / dynamic polymers (lab extension; seed list in `data/README.md`) |
 
-For `chem`, `--last_tier` is required. For `ad` and `cs`, it is optional.
+For `chem` and `polymer`, `--last_tier` is required. For `ad` and `cs`, it is optional.
 
 CS schema induction and CS Phase II extraction are intentionally not part of this KDD artifact.
 
@@ -156,6 +157,8 @@ python prompt_pipeline.py --domain chem --last_tier mof --seeds data/seeds_MOF -
 python prompt_pipeline.py --domain chem --last_tier zif --seeds data/seeds_ZIF --output tests/chem/zif_queries
 python prompt_pipeline.py --domain ad --seeds data/seeds_ad --output tests/ad/queries
 python prompt_pipeline.py --domain cs --seeds data/seeds_prompt --output tests/cs/queries
+python prompt_pipeline.py --domain polymer --last_tier disulfide --seeds data/seeds_disulfide --output tests/polymer/disulfide_queries
+python prompt_pipeline.py --domain polymer --last_tier battery --seeds data/seeds_battery --output tests/polymer/battery_queries
 ```
 
 Outputs include:

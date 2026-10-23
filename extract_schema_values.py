@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import argparse, argparse, csv, sys
+import argparse, csv, sys
 from pathlib import Path
-from typing import List
+from typing import List, Tuple
 
 # Make sibling extract_lib importable when run as `python extract_schema_values.py`
 ROOT_DIR = Path(__file__).resolve().parent
@@ -19,10 +19,11 @@ from extract_lib.config import (
     SKIP_IF_DONE,
 )
 from extract_lib.llm_extract import build_chat_client, call_extract, get_model_deployment
-from extract_lib.pdf_io import extract_pdf_text
+from extract_lib.pdf_io import extract_pdf_blocks, extract_pdf_text
 from extract_lib.postprocess import normalize_extraction
 from extract_lib.prompt_builder import build_system_prompt, build_user_prompt
 from extract_lib.retrieval import (
+    Source,
     paper_relevance_signal,
     render_context_pack,
     retrieve_per_field_contexts,
@@ -72,17 +73,37 @@ def _parse_args() -> argparse.Namespace:
                    help="Disable skip-if-done behavior; overwrite outputs.")
     return p.parse_args()
 
+# PDF loading: section-labeled blocks, falling back to plain text
+def _load_paper(pdf_path: Path, max_chars: int = 0) -> Tuple[Source, int]:
+    """Returns (source, n_chars). Source is a list of TextBlocks when the layout
+    parse works, else plain text. max_chars > 0 truncates either form."""
+    blocks = extract_pdf_blocks(pdf_path)
+    if blocks:
+        if max_chars and max_chars > 0:
+            kept, used = [], 0
+            for b in blocks:
+                if used >= max_chars:
+                    break
+                kept.append(b)
+                used += len(b.text)
+            blocks = kept
+        return blocks, sum(len(b.text) for b in blocks)
+    text = extract_pdf_text(pdf_path)
+    if max_chars and max_chars > 0:
+        text = text[:max_chars]
+    return text, len(text)
+
 # Relevance-ranking pass
 def _rank_and_select(all_pdfs: List[Path], fields, top_n: int, out_dir: Path) -> List[Path]:
     print(f"📊 Ranking {len(all_pdfs)} PDFs by relevance "
           f"(this is a CPU-only pass, no LLM tokens spent)...")
     scored: List[tuple] = []   # (n_covered, score, n_paragraphs, pdf_path)
     for i, pdf in enumerate(all_pdfs, 1):
-        text = extract_pdf_text(pdf)
-        if not text or len(text) < 200:
+        source, n_chars = _load_paper(pdf)
+        if n_chars < 200:
             scored.append((0, 0.0, 0, pdf))
         else:
-            rel = paper_relevance_signal(text, fields)
+            rel = paper_relevance_signal(source, fields)
             scored.append((rel.n_fields_covered, rel.total_best_score, rel.n_paragraphs, pdf))
         if i % 20 == 0 or i == len(all_pdfs):
             print(f"   ranked {i}/{len(all_pdfs)}")
@@ -201,17 +222,15 @@ def main() -> int:
 
         print(f"[{i}/{len(pdfs)}] 📄 {paper_id}")
 
-        # 1) PDF -> text (optionally capped by --max_chars_per_paper)
-        full_text = extract_pdf_text(pdf_path)
-        if args.max_chars_per_paper and args.max_chars_per_paper > 0:
-            full_text = full_text[: args.max_chars_per_paper]
-        if not full_text or len(full_text) < 200:
+        # 1) PDF -> section-labeled blocks (optionally capped by --max_chars_per_paper)
+        source, n_chars = _load_paper(pdf_path, args.max_chars_per_paper)
+        if n_chars < 200:
             print("   ⚠️  PDF text too short — skipping.")
             skipped.append(paper_id)
             continue
 
         # 2) Retrieval: build the per-field evidence pack
-        ctx = retrieve_per_field_contexts(full_text, fields)
+        ctx = retrieve_per_field_contexts(source, fields)
         if not ctx.selected_indices:
             print("   ⚠️  No relevant passages found — skipping.")
             skipped.append(paper_id)

@@ -49,18 +49,34 @@ def load_schema(schema_path: Path) -> List[SchemaField]:
     for f in raw_fields:
         if not isinstance(f, dict) or "name" not in f:
             continue
+        # Phase-I final_schema.json (schema_lib) writes evidence_examples /
+        # merged_from / name_variants and no value_type; hand-written Phase-II
+        # schemas use evidence_snippets / member_field_names. Accept both.
+        aliases = _str_list(f.get("aliases")) + [
+            v for v in _str_list(f.get("name_variants")) if v != f["name"]]
         out.append(
             SchemaField(
                 name=str(f["name"]),
                 description=str(f.get("description", "") or ""),
-                value_type=str(f.get("value_type", "string") or "string"),
+                # No declared type -> "array": a paper often reports several
+                # samples, and a single-value cap would silently drop them.
+                value_type=str(f.get("value_type") or "array"),
                 scope=str(f.get("scope", "") or ""),
-                aliases=[str(a) for a in (f.get("aliases") or []) if a],
-                member_field_names=[str(m) for m in (f.get("member_field_names") or []) if m],
-                evidence_snippets=[str(s) for s in (f.get("evidence_snippets") or []) if s],
+                aliases=list(dict.fromkeys(aliases)),
+                member_field_names=_str_list(f.get("member_field_names")
+                                             or f.get("merged_from")),
+                evidence_snippets=_str_list(f.get("evidence_snippets")
+                                            or f.get("evidence_examples")),
             )
         )
     return out
+
+def _str_list(x) -> List[str]:
+    if not x:
+        return []
+    if isinstance(x, str):
+        return [x]
+    return [str(v) for v in x if v]
 
 def schema_field_names(fields: List[SchemaField]) -> List[str]:
     return [f.name for f in fields]

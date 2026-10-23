@@ -76,6 +76,40 @@ SCHEMA_DOMAINS: Dict[str, SchemaDomainSpec] = {
             "intervention) already exist.",
         ],
     ),
+    "polymer": SchemaDomainSpec(
+        name="polymer",
+        extractor_role="high-precision polymer science literature extractor",
+        task_noun="structured polymer materials database",
+        valid_last_tiers={
+            "disulfide": "Disulfide-bond dynamic polymers",
+            "battery":   "Self-healing polymer electrolytes for batteries",
+        },
+        default_last_tier=None,
+        avoid_fields=[
+            "bibliographic metadata (title, authors, doi, year, journal)",
+            "reagent supplier, purity, or purchase details",
+            "properties of materials cited from prior work rather than this paper",
+            "fields too specific to a single paper",
+        ],
+        generic_field_names=[
+            "data", "result", "results", "value", "values",
+            "info", "information", "details", "summary",
+            "method", "methods", "approach", "type",
+        ],
+        merge_rules=[
+            "Keep only ONE field for molecular weight "
+            "(e.g. merge mn, mw, number_average_molecular_weight, molecular_weight).",
+            "Keep only ONE field for thermal decomposition "
+            "(e.g. merge td, td5, decomposition_temperature, thermal_stability).",
+            "Keep only ONE field for self-healing efficiency / recovery ratio, "
+            "and ONE field for healing conditions (time, temperature, stimulus).",
+            "Keep only ONE field for ionic conductivity variants "
+            "(room-temperature vs. temperature-dependent conductivity).",
+            "Drop overly broad fields such as polymer_type or material_class if "
+            "more specific fields (polymer name, dynamic bond type, backbone) "
+            "already exist.",
+        ],
+    ),
 }
 
 def resolve_domain_and_last_tier(args) -> Tuple[SchemaDomainSpec, str, str]:

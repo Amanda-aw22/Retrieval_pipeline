@@ -15,6 +15,9 @@ def build_extraction_prompt(
     field_block_lines: List[str] = []
     for f in final_fields:
         line = f"- {f['name']}: {f['description']}"
+        aliases = (f.get("aliases") or [])[:5]
+        if aliases:
+            line += f"  (also called: {', '.join(map(str, aliases))})"
         examples = (f.get("examples") or [])[:2]
         if examples:
             line += f"  (examples: {', '.join(map(str, examples))})"

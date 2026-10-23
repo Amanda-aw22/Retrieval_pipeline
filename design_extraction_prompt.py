@@ -16,6 +16,7 @@ from schema_lib.sampling import load_pdf_texts, relevance_filtered_sample
 from schema_lib.fields   import (
     propose_candidate_fields_per_paper,
     merge_candidate_fields,
+    group_synonym_candidates,
     select_final_schema,
 )
 from schema_lib.refine   import refine_schema
@@ -30,14 +31,15 @@ def _make_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--domain", required=True,
         choices=list(SCHEMA_DOMAINS.keys()),
-        help="Schema-induction domain. KDD artifact supports: chem | ad.",
+        help="Schema-induction domain: chem | ad | polymer.",
     )
     p.add_argument(
         "--last_tier", "--last-tier",
         dest="last_tier", default=None,
-        choices=["cof", "mof", "zif", "amyloid"],
+        choices=["cof", "mof", "zif", "amyloid", "disulfide", "battery"],
         help="Retrieval-focus last tier. "
-             "REQUIRED for --domain chem (cof|mof|zif). "
+             "REQUIRED for --domain chem (cof|mof|zif) and "
+             "--domain polymer (disulfide|battery). "
              "Defaults to 'amyloid' for --domain ad.",
     )
     p.add_argument(
@@ -86,6 +88,10 @@ def _make_parser() -> argparse.ArgumentParser:
                         "(on by default). When enabled, merges duplicate "
                         "fields, keeps one per concept, and drops overly broad "
                         "fields before the schema is frozen.")
+    p.add_argument("--no_synonym_grouping", action="store_true",
+                   help="Disable the LLM pass that pools same-concept candidate "
+                        "fields (e.g. *_lifetime vs *_lifespan) BEFORE the "
+                        "min_support filter (on by default).")
     p.add_argument("--no_debug", action="store_true",
                    help="If set, do not write schema_debug.json, "
                         "paper_relevance.json, or semantic_merge.json.")
@@ -153,6 +159,17 @@ def main():
         spec=spec,
         last_tier_text=last_tier_text,
     )
+
+    # ---------- Pool same-concept candidates before support filtering ----------
+    synonym_debug = {"applied": False, "reason": "disabled"}
+    if not args.no_synonym_grouping:
+        canonicals, synonym_debug = group_synonym_candidates(
+            canonicals=canonicals, spec=spec, last_tier_text=last_tier_text)
+        for g in synonym_debug.get("groups", []):
+            print(f"  [synonyms] '{g['keep']}' <- {g['merge_from']}  "
+                  f"(support={g['support_count']})")
+    if not args.no_debug:
+        save_json(out_dir / "synonym_groups.json", synonym_debug)
     canonicals_for_disk = [
         {k: v for k, v in c.items() if k != "_signals"}
         for c in canonicals

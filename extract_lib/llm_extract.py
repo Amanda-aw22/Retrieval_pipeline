@@ -114,6 +114,7 @@ def call_extract(
     system_prompt: str,
     user_prompt: str,
     paper_id: str,
+    max_completion_tokens: int = MAX_COMPLETION_TOKENS,
 ) -> Optional[Dict[str, Any]]:
     """Run a single extraction call. Returns parsed JSON or None on failure."""
     messages = [
@@ -127,7 +128,7 @@ def call_extract(
             resp = client.chat.completions.create(
                 model=model,
                 messages=messages,
-                max_completion_tokens=MAX_COMPLETION_TOKENS,
+                max_completion_tokens=max_completion_tokens,
                 temperature=LLM_TEMPERATURE,
                 response_format={"type": "json_object"},
             )

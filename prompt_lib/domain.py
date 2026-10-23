@@ -65,6 +65,27 @@ LAST_TIERS: Dict[str, LastTier] = {
             "large language model", "large language models",
         ],
     ),
+    "disulfide": LastTier(
+        key="disulfide",
+        text="Disulfide-bond dynamic polymers",
+        seeds_dir="data/seeds_disulfide",
+        aliases=[
+            "disulfide", "disulfide bond", "disulfide-bonded", "S-S bond",
+            "polysulfide", "thioctic acid", "lipoic acid",
+            "poly(thioctic acid)", "dithiolane",
+        ],
+    ),
+    "battery": LastTier(
+        key="battery",
+        text="Self-healing polymer electrolytes for batteries",
+        seeds_dir="data/seeds_battery",
+        aliases=[
+            "polymer electrolyte", "solid polymer electrolyte",
+            "gel polymer electrolyte", "hydrogel electrolyte",
+            "lithium metal battery", "lithium-ion battery", "zinc-ion battery",
+            "ionic conductivity",
+        ],
+    ),
 }
 
 # ============================== DomainSpec ==============================
@@ -278,6 +299,36 @@ AD_EXTRACT_TEMPLATE = """
 ```{paper_text}```
 """
 
+POLYMER_EXTRACT_TEMPLATE = """
+    Return ONLY valid JSON. Use null or [] if unknown. No prose, no backticks.
+
+    Top-level keys MUST be exactly:
+        metadata, target_material, synthesis, properties, biomed, notes
+
+    Schema (polymer science):
+        - metadata:        {title, authors, year, venue, doi, url}
+        - target_material: {polymer_names[], abbreviations[], polymer_class,
+                            dynamic_bond_type[]}
+        - synthesis:       {monomers[], crosslinkers[], initiators_or_catalysts[],
+                            solvents[], polymerization_method, conditions[]}
+        - properties:      {molecular_weight[], dispersity, Tg_C[], Td_C[],
+                            tensile_strength_MPa[], elongation_at_break_pct[],
+                            self_healing_efficiency_pct[], healing_conditions[],
+                            ionic_conductivity_S_cm[], other[]}
+        - biomed:          {applications[], device_performance[]}
+        - notes: []
+
+    Rules:
+        - target_material lists ONLY polymers prepared or studied in THIS work
+          (usually named in the abstract or the "Herein / In this work"
+          paragraph). Do not list materials cited from prior work.
+        - Monomers, crosslinkers, initiators, salts, and solvents belong in
+          synthesis, not target_material.
+
+    Text:
+```{paper_text}```
+"""
+
 # ============================== Domain registry ==============================
 _BASE_CHEM_TIERS = [
     "Physical sciences",
@@ -297,6 +348,22 @@ _BASE_AD_TIERS = [
     "Neuroscience",
     "Neurodegenerative disease",
     "Alzheimer's disease",
+]
+
+_BASE_POLYMER_TIERS = [
+    "Physical sciences",
+    "Chemistry",
+    "Polymer chemistry",
+    "Self-healing and dynamic polymers",
+]
+
+_POLYMER_DOMAIN_ASPECTS = [
+    "how the polymer is synthesized (monomers, dynamic bonds, crosslinking)",
+    "how its structure and molecular weight are characterized",
+    "how its self-healing, recyclability, or dynamic behavior is evaluated",
+    "how its mechanical, thermal, or electrochemical properties are measured",
+    "how it is applied (adhesives, actuators, electrolytes, devices)",
+    "any other important themes that appear in the seed papers",
 ]
 
 _CHEM_DOMAIN_ASPECTS = [
@@ -357,6 +424,16 @@ DOMAINS: Dict[str, DomainSpec] = {
         valid_last_tiers=["amyloid"],
         default_last_tier="amyloid",
     ),
+    "polymer": DomainSpec(
+        domain_key="polymer",
+        base_tiers=_BASE_POLYMER_TIERS,
+        arxiv_bool="(cat:cond-mat.soft OR cat:cond-mat.mtrl-sci OR cat:physics.chem-ph)",
+        system_role="polymer science / materials",
+        domain_aspects=_POLYMER_DOMAIN_ASPECTS,
+        extract_prompt_template=POLYMER_EXTRACT_TEMPLATE,
+        valid_last_tiers=["disulfide", "battery"],
+        default_last_tier=None,                 # --last_tier is REQUIRED
+    ),
 }
 
 # ============================== CLI parsing ==============================
@@ -366,7 +443,8 @@ def _parse_cli() -> argparse.Namespace:
     parser.add_argument(
         "--last_tier", "--last-tier",
         dest="last_tier", type=str, default=None,
-        help="Last-tier key: one of cof / mof / zif / amyloid / prompt.",
+        help="Last-tier key: one of cof / mof / zif / amyloid / prompt / "
+             "disulfide / battery.",
     )
     args, _ = parser.parse_known_args()
     return args

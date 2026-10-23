@@ -66,6 +66,34 @@ _GENERAL_RULES = """[EXTRACTION RULES]
 9. NORMALIZE WORDING. Use the natural wording the paper uses, but strip
    trailing punctuation, citation numbers (e.g. [12]), reference year
    markers (e.g. "(2019)"), and reference IDs.
+
+10. THIS PAPER'S MATERIALS ONLY. Each passage header shows its section
+   (Abstract / Introduction / Experimental / Results / Conclusion), its
+   subheading, "TABLE", and "cites prior work". Use them to decide whose
+   material a value belongs to:
+     - The Abstract and "Herein / In this work / we report" passages name
+       THIS paper's own materials. Extract values only for those materials
+       (including their sample variants). Do not extract values of control
+       or comparison samples (non-dynamic / component-missing analogues,
+       reference polymers, liquid electrolytes, commercial benchmarks), even
+       when they were measured in this paper.
+     - Introduction passages and passages marked "cites prior work" usually
+       describe other groups' materials. Do not report their values as this
+       paper's results.
+     - "Materials" subsections list reagents (monomers, initiators,
+       catalysts, salts, solvents, fillers). They are components, not the
+       studied polymer; use them only for fields that ask for such components.
+     - Comparison tables may mix this work with literature rows; use only the
+       rows for this paper's materials.
+
+11. SAMPLE LABELS. When the passages give a field's value for more than one
+   sample, formulation, or test condition, prefix each value with the sample
+   name or condition as written in the paper, so values stay attached to the
+   right material:
+       "P1 (M/I = 100): 12 kDa", "P1 (M/I = 500): 48 kDa"
+       "Sample A, 25 °C: 1.0 × 10−4 S cm−1", "Sample A, 60 °C: 5.0 × 10−4 S cm−1"
+   If the paper reports a single material under a single condition, give the
+   bare value with no prefix.
 """
 
 _OUTPUT_FORMAT = """[OUTPUT FORMAT — return a single JSON object]

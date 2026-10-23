@@ -19,6 +19,34 @@ ALIAS_HIT_WEIGHT = 2.0        # score multiplier for alias keyword hits
 NAME_HIT_WEIGHT = 3.0         # extra boost when the canonical field name appears
 EVIDENCE_HIT_WEIGHT = 0.5     # small boost from overlap with phase-1 evidence snippets
 
+# ----- Retrieval: structure-aware re-weighting -----
+# Applied only to paragraphs that already match a field (keyword score > 0),
+# so these re-rank relevant passages; they never pull in unrelated ones.
+# Section labels come from extract_lib.pdf_io.extract_pdf_blocks.
+SECTION_WEIGHTS = {
+    "abstract":     1.5,      # this paper's own material + headline numbers
+    "results":      1.3,      # most property values live here
+    "conclusion":   1.1,
+    "experimental": 1.0,
+    "unknown":      1.0,      # plain-text fallback / unrecognized layout
+    "front":        0.6,      # title, authors, keywords
+    "introduction": 0.5,      # mostly background + prior work
+}
+DROP_SECTIONS = {"back_matter"}   # references, acknowledgements, CRediT, ...
+TABLE_WEIGHT = 1.4                # tables concentrate property values
+MATERIALS_SUBSECTION_WEIGHT = 0.7 # "2.1. Materials": reagent lists (kept for monomer-type fields)
+CITATION_PENALTY = 0.15           # per citation marker like [12] or "et al."
+CITATION_FLOOR = 0.4              # citation penalty never multiplies below this
+PRIOR_WORK_CUE_WEIGHT = 0.7       # "has been reported", "previously", ...
+REAGENT_CUE_WEIGHT = 0.8          # "purchased from", "used as received", ...
+THIS_WORK_CUE_BONUS = 1.0         # "Herein", "in this work", "denoted as", ... (additive)
+NUMERIC_UNIT_BONUS = 0.5          # per number-with-unit, additive
+NUMERIC_UNIT_BONUS_CAP = 2.0
+# Always send the abstract + "Herein/In this work" paragraphs so the LLM can
+# anchor which materials belong to THIS paper (abstract-first anchoring).
+PIN_ANCHOR_PASSAGES = True
+MAX_PINNED_PASSAGES = 4
+
 # ----- LLM -----
 DEFAULT_MODEL_DEPLOYMENT = "gpt-4o"
 MAX_COMPLETION_TOKENS = 4000  # array values + evidence per field need room

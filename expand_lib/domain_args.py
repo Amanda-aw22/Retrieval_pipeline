@@ -53,6 +53,7 @@ SEARCH_SOURCES: Dict[str, str] = {
 _CHEM_ARXIV_CATS = ["cond-mat.mtrl-sci", "physics.chem-ph"]
 _CS_ARXIV_CATS   = ["cs.CL", "cs.AI", "cs.LG", "cs.SE"]
 _AD_ARXIV_CATS   = ["q-bio.NC", "q-bio.BM", "q-bio.MN", "q-bio.SC"]
+_POLYMER_ARXIV_CATS = ["cond-mat.soft", "cond-mat.mtrl-sci", "physics.chem-ph"]
 
 _CHEM_BASE_TIERS = ["Physical sciences", "Chemistry",
                     "Materials chemistry", "Porous materials"]
@@ -60,6 +61,8 @@ _CS_BASE_TIERS   = ["Computer science", "Artificial intelligence",
                     "Machine learning"]
 _AD_BASE_TIERS   = ["Health sciences", "Neuroscience",
                     "Neurodegenerative disease", "Alzheimer's disease"]
+_POLYMER_BASE_TIERS = ["Physical sciences", "Chemistry", "Polymer chemistry",
+                       "Self-healing and dynamic polymers"]
 
 @dataclass
 class LastTier:
@@ -101,11 +104,28 @@ LAST_TIERS: Dict[str, LastTier] = {
         aliases=["amyloid", "amyloid-beta", "amyloid beta", "Abeta", "A-beta",
                  "APP", "APP processing", "amyloid precursor protein"],
     ),
+    "disulfide": LastTier(
+        key="disulfide",
+        text="Disulfide-bond dynamic polymers",
+        aliases=["disulfide", "disulfide bond", "disulfide-bonded", "S-S bond",
+                 "polysulfide", "thioctic acid", "lipoic acid",
+                 "poly(thioctic acid)", "dithiolane"],
+    ),
+    "battery": LastTier(
+        key="battery",
+        text="Self-healing polymer electrolytes for batteries",
+        aliases=["polymer electrolyte", "solid polymer electrolyte",
+                 "gel polymer electrolyte", "hydrogel electrolyte",
+                 "lithium metal battery", "lithium-ion battery",
+                 "zinc-ion battery", "ionic conductivity"],
+    ),
 }
 
 _CHEM_DEFAULT_SOURCES = ("arxiv", "openalex", "nature", "core")
 _AD_DEFAULT_SOURCES   = ("pubmed", "biorxiv", "openalex", "core")
 _CS_DEFAULT_SOURCES   = ("arxiv", "openalex")
+# Polymer journals are mostly not on arXiv; lead with OpenAlex / Nature / CORE.
+_POLYMER_DEFAULT_SOURCES = ("openalex", "nature", "core", "arxiv")
 
 # ================== Domain registry ==================
 DOMAINS: Dict[str, DomainSpec] = {
@@ -129,6 +149,13 @@ DOMAINS: Dict[str, DomainSpec] = {
         default_sources=_AD_DEFAULT_SOURCES,
         valid_last_tiers=["amyloid"],
         default_last_tier="amyloid",
+    ),
+    "polymer": DomainSpec(
+        arxiv_cats=_POLYMER_ARXIV_CATS,
+        base_tiers=_POLYMER_BASE_TIERS,
+        default_sources=_POLYMER_DEFAULT_SOURCES,
+        valid_last_tiers=["disulfide", "battery"],
+        default_last_tier=None,                       # MUST pass --last_tier
     ),
 }
 

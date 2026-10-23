@@ -5,6 +5,7 @@ from .domain import SchemaDomainSpec
 from .fields import (
     _score_signals,
     canonicalize_field_name,
+    collect_aliases,
     _last_tier_tokens,
     _matches_avoid,
     _is_generic_name,
@@ -57,6 +58,9 @@ def refine_schema(
         prev_evidence  = list(prev.get("evidence_examples") or [])
         prev_support   = int(prev.get("support_count") or 0)
         description    = (prev.get("description") or "").strip()
+        # Keep the previous name as an alias if canonicalization renamed it.
+        aliases        = collect_aliases(prev_name, prev.get("aliases") or [],
+                                         [prev.get("name", "")])
 
         if match is not None:
             consumed_canonicals.add(match["name"])
@@ -76,6 +80,7 @@ def refine_schema(
             if len(new_desc) > len(description):
                 description = new_desc
 
+            aliases = collect_aliases(prev_name, aliases, match.get("aliases") or [])
             merged_papers = list((match["_signals"] or {}).get("papers", []))
             support_count = prev_support + match.get("support_count", 0)
             source = "refined"
@@ -119,6 +124,7 @@ def refine_schema(
         scored_pool.append((score, {
             "name":              prev_name,
             "description":       description,
+            "aliases":           aliases,
             "examples":          merged_examples[:5],
             "support_count":     support_count,
             "evidence_examples": merged_evidence[:3],
@@ -154,6 +160,7 @@ def refine_schema(
         scored_pool.append((score, {
             "name":              c["name"],
             "description":       c["description"],
+            "aliases":           c.get("aliases", []),
             "examples":          c["examples"],
             "support_count":     c["support_count"],
             "evidence_examples": c["evidence_examples"],

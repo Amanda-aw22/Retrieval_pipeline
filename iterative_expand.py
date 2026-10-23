@@ -15,17 +15,20 @@ DOMAIN_LAST_TIERS: Dict[str, Dict[str, Any]] = {
     "chem": {"valid": ["cof", "mof", "zif"], "default": None},
     "ad":   {"valid": ["amyloid"],            "default": "amyloid"},
     "cs":   {"valid": ["prompt"],             "default": "prompt"},
+    "polymer": {"valid": ["disulfide", "battery"], "default": None},
 }
 
 LAST_TIER_TEXT: Dict[str, str] = {
-    "cof":     "Covalent Organic Frameworks (COFs)",
-    "mof":     "Metal-Organic Frameworks (MOFs)",
-    "zif":     "Zeolitic Imidazolate Frameworks (ZIFs)",
-    "amyloid": "Amyloid production and APP processing",
-    "prompt":  "Prompt engineering for large language models",
+    "cof":       "Covalent Organic Frameworks (COFs)",
+    "mof":       "Metal-Organic Frameworks (MOFs)",
+    "zif":       "Zeolitic Imidazolate Frameworks (ZIFs)",
+    "amyloid":   "Amyloid production and APP processing",
+    "prompt":    "Prompt engineering for large language models",
+    "disulfide": "Disulfide-bond dynamic polymers",
+    "battery":   "Self-healing polymer electrolytes for batteries",
 }
 
-SCHEMA_INDUCTION_DOMAINS: Set[str] = {"chem", "ad"}
+SCHEMA_INDUCTION_DOMAINS: Set[str] = {"chem", "ad", "polymer"}
 
 def _resolve_domain(args) -> Tuple[str, str]:
     """Returns (last_tier_key, last_tier_text). Same contract as the frozen modules."""
@@ -374,6 +377,7 @@ _DEFAULT_SOURCES_BY_DOMAIN: Dict[str, Tuple[str, ...]] = {
     "chem": ("arxiv", "openalex", "nature", "core"),
     "ad":   ("pubmed", "biorxiv", "openalex", "core"),
     "cs":   ("arxiv", "openalex"),
+    "polymer": ("openalex", "nature", "core", "arxiv"),
 }
 
 
@@ -776,11 +780,13 @@ def _make_parser() -> argparse.ArgumentParser:
         description="AutoSchema Phase-I iterative orchestrator (KDD camera-ready artifact)."
     )
     p.add_argument("--domain", required=True, choices=list(DOMAIN_LAST_TIERS.keys()),
-                   help="Active domain. KDD artifact supports chem | ad | cs.")
+                   help="Active domain: chem | ad | cs | polymer.")
     p.add_argument("--last_tier", "--last-tier",
                    dest="last_tier", default=None,
-                   choices=["cof", "mof", "zif", "amyloid", "prompt"],
-                   help="Required for chem (cof|mof|zif); defaults for ad/cs.")
+                   choices=["cof", "mof", "zif", "amyloid", "prompt",
+                            "disulfide", "battery"],
+                   help="Required for chem (cof|mof|zif) and polymer "
+                        "(disulfide|battery); defaults for ad/cs.")
     p.add_argument("--seed_dir", required=True,
                    help="Folder of seed PDFs used in round 1.")
     p.add_argument("--output_root", default=None,

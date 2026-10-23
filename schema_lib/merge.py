@@ -4,6 +4,7 @@ import json
 from typing import Any, Dict, List, Tuple
 
 from .domain import SchemaDomainSpec
+from .fields import collect_aliases
 
 _MERGE_SYSTEM = "Return ONLY valid JSON. No prose, no markdown, no commentary."
 
@@ -74,12 +75,15 @@ def _merge_records(keep_name: str, member_names: List[str],
     examples = list(base.get("examples") or [])
     evidence = list(base.get("evidence_examples") or [])
     support = int(base.get("support_count") or 0)
+    aliases = list(base.get("aliases") or [])
 
     folded: List[str] = []
     for n in member_names:
         if n == keep_name or n not in by_name:
             continue
         r = by_name[n]
+        # A folded field's name and aliases become aliases of the kept field.
+        aliases = collect_aliases(keep_name, aliases, [n], r.get("aliases") or [])
         for ex in (r.get("examples") or []):
             if ex and ex not in examples:
                 examples.append(ex)
@@ -92,6 +96,7 @@ def _merge_records(keep_name: str, member_names: List[str],
     base["examples"] = examples[:5]
     base["evidence_examples"] = evidence[:3]
     base["support_count"] = support
+    base["aliases"] = aliases
     if folded:
         base["merged_from"] = folded
         base["source"] = "merged"

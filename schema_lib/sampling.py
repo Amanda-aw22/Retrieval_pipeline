@@ -44,6 +44,58 @@ def _keyword_overlap_score(paper_text: str, target_keywords: List[str]) -> float
     hits = sum(1 for kw in target_keywords if kw.lower() in body)
     return hits / max(1, len(target_keywords))
 
+# Section-aware excerpt for field proposal
+# A plain text[:N] prefix is mostly front matter + introduction (background and
+# prior work), so proposals skew toward setup parameters and miss the property
+# fields reported in Results. Instead: abstract + conclusion in full, a capped
+# slice of the experimental section, and the rest of the budget for the most
+# number-dense Results paragraphs (kept in document order).
+_NUMERIC_UNIT_RE = re.compile(
+    r"\d\s*(?:°C|K\b|MPa|GPa|kPa|%|S\s?cm|mS\s?cm|g\s?mol|kDa|mAh|mA\s?cm|J\s?m|eV|V\b|h\b|nm|μm)")
+EXPERIMENTAL_SHARE = 0.2
+
+def _section_excerpt(pdf: Path, budget: int) -> str:
+    """Abstract / Results / Conclusion / Experimental excerpt within `budget`
+    chars, with "## Section" markers. Returns "" if the layout parse fails."""
+    try:
+        from extract_lib.pdf_io import extract_pdf_blocks
+        blocks = extract_pdf_blocks(pdf)
+    except Exception:
+        return ""
+    if not blocks:
+        return ""
+
+    def text_of(sec: str) -> List[Tuple[int, str]]:
+        return [(i, b.text) for i, b in enumerate(blocks) if b.section == sec]
+
+    picked: Dict[str, List[Tuple[int, str]]] = {}
+    used = 0
+
+    def take(sec: str, items: List[Tuple[int, str]], cap: int) -> None:
+        nonlocal used
+        got = []
+        for i, t in items:
+            if used + len(t) > cap:
+                continue
+            got.append((i, t))
+            used += len(t)
+        picked[sec] = sorted(got)
+
+    take("abstract", text_of("abstract"), budget)
+    take("conclusion", text_of("conclusion"), budget)
+    take("experimental", text_of("experimental"),
+         used + int(EXPERIMENTAL_SHARE * budget))
+    results = sorted(text_of("results"),
+                     key=lambda it: -len(_NUMERIC_UNIT_RE.findall(it[1])))
+    take("results", results, budget)
+
+    parts: List[str] = []
+    for sec, title in (("abstract", "Abstract"), ("experimental", "Experimental"),
+                       ("results", "Results"), ("conclusion", "Conclusion")):
+        if picked.get(sec):
+            parts.append(f"## {title}\n" + "\n".join(t for _, t in picked[sec]))
+    return "\n\n".join(parts)
+
 # Pure PDF loading
 def load_pdf_texts(
     pdf_dir: Path,
@@ -59,10 +111,11 @@ def load_pdf_texts(
         try:
             txt_path = pdf_to_text(pdf)
             text = Path(txt_path).read_text(encoding="utf-8", errors="ignore")
+            proposal = _section_excerpt(pdf, proposal_chars) or text[:proposal_chars]
             out.append({
                 "source_file":         pdf.name,
                 "text_for_relevance":  text[:relevance_chars],
-                "text_for_proposal":   text[:proposal_chars],
+                "text_for_proposal":   proposal,
             })
         except Exception as e:
             print(f"  [warn] failed to read {pdf.name}: {e}")

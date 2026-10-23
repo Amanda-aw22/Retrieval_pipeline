@@ -174,8 +174,8 @@ def main():
         "--domain",
         type=str,
         default=None,
-        choices=["chem", "cs", "ad"],
-        help="Domain key (chem | cs | ad). Consumed by prompt_lib.domain at import.",
+        choices=["chem", "cs", "ad", "polymer"],
+        help="Domain key (chem | cs | ad | polymer). Consumed by prompt_lib.domain at import.",
     )
     parser.add_argument(
         "--last_tier", "--last-tier",
@@ -183,6 +183,7 @@ def main():
         type=str,
         default=None,
         help="Last-tier key: cof | mof | zif (required for --domain chem); "
+             "disulfide | battery (required for --domain polymer); "
              "amyloid (default for --domain ad); prompt (default for --domain cs).",
     )
     parser.add_argument(

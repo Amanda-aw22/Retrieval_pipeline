@@ -322,16 +322,17 @@ def _make_parser() -> argparse.ArgumentParser:
                         help="Round directory (default: runs/<domain>/test_expand_<ts>)")
     parser.add_argument(
         "--domain", required=True,
-        choices=list(DOMAINS.keys()),         # ["chem", "cs", "ad"]
-        help="Active domain. One of: chem | cs | ad.",
+        choices=list(DOMAINS.keys()),         # ["chem", "cs", "ad", "polymer"]
+        help="Active domain. One of: chem | cs | ad | polymer.",
     )
     parser.add_argument(
         "--last_tier", "--last-tier",
         dest="last_tier",
-        choices=list(LAST_TIERS.keys()),      # ["cof","mof","zif","prompt","amyloid"]
+        choices=list(LAST_TIERS.keys()),
         default=None,
         help="Retrieval-focus last tier. "
-             "REQUIRED for --domain chem (cof | mof | zif). "
+             "REQUIRED for --domain chem (cof | mof | zif) and "
+             "--domain polymer (disulfide | battery). "
              "Defaults to 'prompt' for cs, 'amyloid' for ad.",
     )
     parser.add_argument(
