@@ -1,13 +1,12 @@
-# Property record extraction — instructions
+# Property record extraction — shared rules
 
-You read passages from ONE research paper and extract every property
-measurement the paper reports for its own polymers / samples, as one record per
-measured value. You return a single JSON object (format at the end).
+These rules are shared by every extraction method (A full text, B sectioned
+passages, C sample-first). Each method prepends a short "INPUT" section from
+extract_lib/method_instructions/ that describes what text you are given.
 
-The passages are numbered and labeled, e.g.
-`[Passage 12 | page 5 | Results | 3.2 Mechanical properties | cites prior work]`.
-The label tells you the page, the section, the subheading, whether the passage
-is a TABLE, and whether it contains citation markers.
+Task: from ONE research paper, extract every property measurement the paper
+reports for its own polymers / samples, as one record per measured value.
+Return a single JSON object (format in §6).
 
 ## 1. What is one record
 
@@ -30,9 +29,22 @@ or average values; record what the paper states.
 | `value` | The number(s) only, as written: `2.7 × 10−4`, `0.383`, `~2`, `15.0–189.2`, `>1100`. Use the paper's notation; keep ranges and approximate signs. For a qualitative result (e.g. `amorphous`, `no dendrites`), put the short term here. | never empty |
 | `unit` | The unit, separated from the value: `S cm−1`, `MPa`, `°C`, `%`, `kDa`, `mAh g−1`, `h`. | `""` for unitless values (dispersity, ratios, transference number, qualitative) |
 | `test_condition` | Conditions under which the value was measured: temperature, rate, current density, C-rate, cycle number, frequency, atmosphere, humidity, healing time/temperature, measurement method (DSC, TGA, DMA, EIS, lap-shear). Short, semicolon-separated: `30 °C; EIS`, `0.5C; 200 cycles; 60 °C`, `healed 2 h at 25 °C`. | `""` |
-| `application` | The application the paper states for this sample (e.g. `solid electrolyte for Li-metal batteries`, `underwater adhesive`, `soft actuator`). Use the application stated in the passages — abstract/conclusion statements about the material apply to its records. | `""` |
-| `evidence` | A verbatim quote (≤ 40 words) from the passage that states this value. Copy exactly, including symbols. | never empty |
-| `passage` | The passage number the quote comes from (integer). | never empty |
+| `application` | The application the paper states for this sample (e.g. `solid electrolyte for Li-metal batteries`, `underwater adhesive`, `soft actuator`). Use the application stated in the text — abstract/conclusion statements about the material apply to its records. | `""` |
+| `evidence` | A verbatim quote (≤ 40 words) from the text that states this value. Copy exactly, including symbols. The quote MUST contain the value itself. | never empty |
+| `passage` | The number of the passage the quote comes from (integer), when the text is given as numbered passages. | `0` when the text has no passage numbers |
+| `sample_evidence` | A verbatim quote (≤ 40 words) where the paper names the sample in a way that ties it to THIS value — often the same sentence as `evidence` (then repeat that sentence, extended to include the sample name), otherwise the sentence / table header / caption that identifies it. | never empty |
+| `sample_passage` | Passage number of `sample_evidence`. | `0` when the text has no passage numbers |
+| `condition_evidence` | A list of `{"quote": "<verbatim ≤ 40 words>", "passage": N}`, one per source of the `test_condition` parts: the same sentence, the experimental/methods text describing the test, a figure or table caption, etc. Every part of `test_condition` must be supported by one of these quotes. | `[]` when `test_condition` is empty |
+| `derivation` | How sample and conditions were tied to the value — a list of one or more of: `stated` (sample, value and conditions all in the `evidence` sentence), `positional` (matched by order, e.g. "A, B and C … 1, 2 and 3", "respectively", table row/column), `cross_passage` (sample or a condition taken from another passage, e.g. the methods section or a caption), `corrected` (you fixed an apparent typo or reinterpreted the wording, e.g. "0.5 ◦C" read as "0.5C"), `inferred` (any other reasoning). | never empty |
+
+### Traceability
+
+`sample` and `test_condition` are your normalized summaries; they do not have
+to be verbatim. But every piece of information in them must be traceable to a
+verbatim quote in `evidence`, `sample_evidence` or `condition_evidence`. If you
+cannot point to text that supports a condition, leave that condition out.
+Whenever you use `positional`, `cross_passage`, `corrected` or `inferred`, say
+so in `derivation` — do not hide inference.
 
 ## 3. Umbrella property names
 
@@ -67,8 +79,9 @@ in `test_condition` or `sample` instead:
   plain reference polymers (e.g. PEO), liquid electrolytes, commercial
   products or benchmarks (e.g. a commercial tape). Words such as "control",
   "reference", "compared with", "without", "pristine" usually mark them.
-- Do NOT extract values the paper attributes to other work: passages in the
-  Introduction or marked `cites prior work` that describe other groups'
+- Do NOT extract values the paper attributes to other work: Introduction /
+  background text and sentences with citation markers ([12], "et al.",
+  "has been reported") that describe other groups'
   materials, and literature rows of comparison tables (keep only the row for
   this work).
 - Reagents (monomers, initiators, catalysts, salts, solvents, fillers) are not
@@ -103,7 +116,11 @@ Return ONLY this JSON object (no Markdown, no commentary):
       "test_condition": "",
       "application": "",
       "evidence": "",
-      "passage": 0
+      "passage": 0,
+      "sample_evidence": "",
+      "sample_passage": 0,
+      "condition_evidence": [{"quote": "", "passage": 0}],
+      "derivation": ["stated"]
     }
   ]
 }
@@ -111,16 +128,22 @@ Return ONLY this JSON object (no Markdown, no commentary):
 
 ### Example (invented paper)
 
-Passage 7 says: "The tensile strength of P2 reached 4.1 MPa with an elongation
-at break of 820%, whereas the non-dynamic control C-P2 broke at 2.3 MPa." and
-the abstract calls P2 "a recyclable elastomer for flexible electronics".
+Passage 4 (Experimental) says: "Tensile tests were carried out at 25 °C at a
+crosshead speed of 20 mm min−1." Passage 7 (Results) says: "The tensile
+strength of P1, P2 and P3 was 2.0, 4.1 and 3.3 MPa, respectively, whereas the
+non-dynamic control C-P2 broke at 2.3 MPa." The abstract calls the P-series
+"recyclable elastomers for flexible electronics".
 
 ```json
 {"sample": "P2", "material_class": "dynamic covalent elastomer",
  "property": "tensile_strength", "property_as_written": "tensile strength",
- "value": "4.1", "unit": "MPa", "test_condition": "", "application": "flexible electronics",
- "evidence": "The tensile strength of P2 reached 4.1 MPa with an elongation at break of 820%", "passage": 7}
-{"sample": "P2", ..., "property": "elongation_at_break", "value": "820", "unit": "%", ...}
+ "value": "4.1", "unit": "MPa", "test_condition": "25 °C; 20 mm min−1; tensile test",
+ "application": "flexible electronics",
+ "evidence": "The tensile strength of P1, P2 and P3 was 2.0, 4.1 and 3.3 MPa, respectively", "passage": 7,
+ "sample_evidence": "The tensile strength of P1, P2 and P3 was 2.0, 4.1 and 3.3 MPa, respectively", "sample_passage": 7,
+ "condition_evidence": [{"quote": "Tensile tests were carried out at 25 °C at a crosshead speed of 20 mm min−1.", "passage": 4}],
+ "derivation": ["positional", "cross_passage"]}
 ```
 
-The 2.3 MPa of the non-dynamic control C-P2 is NOT extracted (§4).
+P1 and P3 get their own records the same way. The 2.3 MPa of the non-dynamic
+control C-P2 is NOT extracted (§4).
