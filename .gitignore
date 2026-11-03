@@ -41,3 +41,7 @@ tests/
 .ipynb_checkpoints/
 data/*
 !data/README.md
+
+# Local seed paper packages
+/AutoSchema_Seed_Papers/
+/AutoSchema_Seed_Papers.zip
