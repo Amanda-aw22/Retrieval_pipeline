@@ -49,7 +49,9 @@ DERIVATIONS = {"stated", "positional", "cross_passage", "corrected", "inferred"}
 # Only this paper's own materials are kept. Answers that still tag records with
 # a non-this-work role (older prompt versions, or the LLM ignoring §4) are dropped.
 EXCLUDED_ROLES = {"control", "comparison", "reference", "prior_work"}
-CSV_COLUMNS = ["paper_id", "paper_type", "sample", "material_class", "property",
+# Paper-level metadata from Phase I (cumulative_metadata.jsonl), when available.
+PAPER_META_FIELDS = ["doi", "title", "year", "retrieval_source"]
+CSV_COLUMNS = ["paper_id", *PAPER_META_FIELDS, "paper_type", "sample", "material_class", "property",
                "property_as_written", "value", "unit", "test_condition", "application",
                "derivation", "flags",
                "evidence", "page", "section", "heading", "passage", "evidence_verified",
@@ -292,7 +294,8 @@ def write_outputs(papers: Sequence[Dict[str, Any]], out_dir: Path) -> Tuple[Path
         w = csv.DictWriter(f, fieldnames=CSV_COLUMNS)
         w.writeheader()
         for p in papers:
-            base = {"paper_id": p["paper_id"], "paper_type": p.get("paper_type", "")}
+            base = {"paper_id": p["paper_id"], "paper_type": p.get("paper_type", ""),
+                    **{k: p.get(k, "") for k in PAPER_META_FIELDS}}
             if not p["records"]:
                 w.writerow(base)
             for r in p["records"]:

@@ -18,6 +18,9 @@ judge (correct / wrong_value / wrong_sample / not_this_work / not_a_property).
 
 Usage:
   python evaluate_records.py --topics disulfide battery --out_dir tests/polymer/compare/report
+  python evaluate_records.py --base compare_v2 --out_dir tests/polymer/compare_v2/report
+  # any output folders of extract_property_records.py (one or more methods):
+  python evaluate_records.py --run B=runs/polymer/battery/run_01/04_records/B --out_dir OUT
 """
 from __future__ import annotations
 
@@ -49,6 +52,21 @@ def use_base(base: str) -> None:
                         "manifests": [f"{base}/{m}/{{t}}/prompts/manifest.json",
                                       f"{base}/{m}/{{t}}/prompts_2/manifest.json"]}
     INVENTORY = f"{base}/C/{{t}}/samples"
+
+def use_runs(runs: Dict[str, str]) -> None:
+    """Explicit output folders of extract_property_records.py, {name: dir}.
+    Cost comes from the dump manifests (agent mode) or llm_calls*.json (API mode)."""
+    global INVENTORY
+    METHODS.clear()
+    for name, d in runs.items():
+        d = Path(d).resolve()
+        METHODS[name] = {"records": str(d / "records.jsonl"),
+                         "manifests": [str(d / f) for f in (
+                             "prompts/manifest.json", "prompts_1/manifest.json",
+                             "prompts_2/manifest.json", "llm_calls.json",
+                             "llm_calls_1.json", "llm_calls_2.json")]}
+        if (d / "samples").is_dir():
+            INVENTORY = str(d / "samples")
 
 def _true(x) -> bool:
     return x is True or str(x).lower() == "true"
@@ -260,12 +278,16 @@ def evaluate(topics: List[str], out_dir: Path) -> None:
 
     for name, rows in (("summary.csv", summary), ("agreement.csv", agree_rows),
                        ("sample_binding.csv", binding), ("per_paper.csv", per_paper)):
+        if not rows:          # e.g. agreement / binding with a single method
+            continue
         with open(out_dir / name, "w", encoding="utf-8", newline="") as fh:
             w = csv.DictWriter(fh, fieldnames=list(rows[0].keys()))
             w.writeheader()
             w.writerows(rows)
 
     def md(rows: List[dict]) -> str:
+        if not rows:
+            return "(needs at least two methods)"
         cols = list(rows[0].keys())
         lines = ["| " + " | ".join(cols) + " |", "|" + "---|" * len(cols)]
         lines += ["| " + " | ".join(str(r[c]) for c in cols) + " |" for r in rows]
@@ -286,8 +308,13 @@ def main() -> None:
     p.add_argument("--out_dir", default=str(TP / "compare" / "report"))
     p.add_argument("--base", default=None,
                    help="Folder (relative to tests/polymer) holding A/, B/, C/ per topic, e.g. compare_v2.")
+    p.add_argument("--run", action="append", default=None, metavar="NAME=DIR",
+                   help="Output folder of extract_property_records.py; repeat to compare methods.")
     a = p.parse_args()
-    if a.base:
+    if a.run:
+        use_runs(dict(r.split("=", 1) for r in a.run))
+        a.topics = ["run"]          # paths have no {t}; load each folder once
+    elif a.base:
         use_base(a.base)
     evaluate(a.topics, Path(a.out_dir))
 
