@@ -30,12 +30,12 @@ Outputs (--out_dir): records.jsonl, records.csv; method C also writes
 samples/<paper_id>.json (step 1), samples.csv and conflicts.csv.
 
 Examples:
-  python extract_property_records.py --pdf_dir data/seeds_battery --out_dir OUT
-  python extract_property_records.py --method A --pdf_dir data/seeds_battery --out_dir OUT --dump_prompts OUT/prompts
-  python extract_property_records.py --method C --stage 1 --pdf_dir data/seeds_battery --out_dir OUT --dump_prompts OUT/prompts_1
-  python extract_property_records.py --method C --stage 1 --pdf_dir data/seeds_battery --out_dir OUT --from_responses OUT/responses_1
-  python extract_property_records.py --method C --stage 2 --pdf_dir data/seeds_battery --out_dir OUT --dump_prompts OUT/prompts_2
-  python extract_property_records.py --method C --stage 2 --pdf_dir data/seeds_battery --out_dir OUT --from_responses OUT/responses_2
+  python extract_property_records.py --pdf_dir data/seeds_batteries --out_dir OUT
+  python extract_property_records.py --method A --pdf_dir data/seeds_batteries --out_dir OUT --dump_prompts OUT/prompts
+  python extract_property_records.py --method C --stage 1 --pdf_dir data/seeds_batteries --out_dir OUT --dump_prompts OUT/prompts_1
+  python extract_property_records.py --method C --stage 1 --pdf_dir data/seeds_batteries --out_dir OUT --from_responses OUT/responses_1
+  python extract_property_records.py --method C --stage 2 --pdf_dir data/seeds_batteries --out_dir OUT --dump_prompts OUT/prompts_2
+  python extract_property_records.py --method C --stage 2 --pdf_dir data/seeds_batteries --out_dir OUT --from_responses OUT/responses_2
 """
 from __future__ import annotations
 

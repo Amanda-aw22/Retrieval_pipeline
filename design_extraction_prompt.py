@@ -36,10 +36,11 @@ def _make_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--last_tier", "--last-tier",
         dest="last_tier", default=None,
-        choices=["cof", "mof", "zif", "amyloid", "disulfide", "battery"],
+        choices=["cof", "mof", "zif", "amyloid",
+                 "disulfide", "batteries", "glass_transition"],
         help="Retrieval-focus last tier. "
              "REQUIRED for --domain chem (cof|mof|zif) and "
-             "--domain polymer (disulfide|battery). "
+             "--domain polymer (disulfide|batteries|glass_transition). "
              "Defaults to 'amyloid' for --domain ad.",
     )
     p.add_argument(

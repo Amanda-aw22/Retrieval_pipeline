@@ -81,8 +81,9 @@ SCHEMA_DOMAINS: Dict[str, SchemaDomainSpec] = {
         extractor_role="high-precision polymer science literature extractor",
         task_noun="structured polymer materials database",
         valid_last_tiers={
-            "disulfide": "Disulfide-bond dynamic polymers",
-            "battery":   "Self-healing polymer electrolytes for batteries",
+            "disulfide":        "Disulfide-containing polymers",
+            "batteries":        "Polymers for battery applications",
+            "glass_transition": "Glass transition in polymers",
         },
         default_last_tier=None,
         avoid_fields=[
@@ -105,6 +106,10 @@ SCHEMA_DOMAINS: Dict[str, SchemaDomainSpec] = {
             "and ONE field for healing conditions (time, temperature, stimulus).",
             "Keep only ONE field for ionic conductivity variants "
             "(room-temperature vs. temperature-dependent conductivity).",
+            "Keep only ONE field for glass transition temperature "
+            "(e.g. merge tg, tg_dsc, tg_dma, glass_transition_temperature); "
+            "the measurement method (DSC / DMA tan delta) and heating rate are "
+            "test conditions, not separate fields.",
             "Drop overly broad fields such as polymer_type or material_class if "
             "more specific fields (polymer name, dynamic bond type, backbone) "
             "already exist.",

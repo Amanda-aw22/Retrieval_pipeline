@@ -18,10 +18,10 @@ Outputs (--out_dir):
   corpus/                    copies of the kept PDFs (the Phase II --pdf_dir)
 
 Example:
-  python screen_papers.py --domain polymer --last_tier battery \
-      --pdf_dir runs/polymer/battery/run_01/01_phase1/cumulative_corpus \
-      --schema_path runs/polymer/battery/run_01/01_phase1/final_schemas/final_schema.json \
-      --out_dir runs/polymer/battery/run_01/02_screen
+  python screen_papers.py --domain polymer --last_tier batteries \
+      --pdf_dir runs/polymer/batteries/run_01/01_phase1/cumulative_corpus \
+      --schema_path runs/polymer/batteries/run_01/01_phase1/final_schemas/final_schema.json \
+      --out_dir runs/polymer/batteries/run_01/02_screen
 """
 from __future__ import annotations
 

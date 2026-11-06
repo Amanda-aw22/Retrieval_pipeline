@@ -70,12 +70,14 @@ The LLM and retrieval environment variables are the same as in [README.md](READM
 Put the seed PDFs here (DOIs listed in [data/README.md](data/README.md)):
 
 ```text
-data/seeds_disulfide/   # --domain polymer --last_tier disulfide
-data/seeds_battery/     # --domain polymer --last_tier battery
+data/seeds_disulfide/          # --domain polymer --last_tier disulfide
+data/seeds_batteries/          # --domain polymer --last_tier batteries
+data/seeds_glass_transition/   # --domain polymer --last_tier glass_transition (no seeds yet)
 ```
 
-> Naming: the code uses `battery` / `seeds_battery`. The `task1-queries` branch README uses
-> `batteries` / `seeds_batteries`. Align the two before merging.
+The polymer subdomain keys, texts and query-generation settings come from the
+`task1-queries` branch (see [QUERY_GENERATION_README.md](QUERY_GENERATION_README.md)).
+Older result folders under `tests/polymer/battery/` keep their original name.
 
 ---
 
@@ -88,9 +90,9 @@ Polymer is registered in `prompt_lib/domain.py`, `expand_lib/domain_args.py` and
 
 ```bash
 python iterative_expand.py \
-  --domain polymer --last_tier battery \
-  --seed_dir data/seeds_battery \
-  --output_root runs/polymer/battery/phase1 \
+  --domain polymer --last_tier batteries \
+  --seed_dir data/seeds_batteries \
+  --output_root runs/polymer/batteries/phase1 \
   --rounds 2 --target_total_papers 30 \
   --max_schema_papers 18 --max_chars_per_paper 12000 \
   --sources openalex,nature,core
@@ -99,12 +101,12 @@ python iterative_expand.py \
 **Or run the steps one at a time:**
 
 ```bash
-python prompt_pipeline.py --domain polymer --last_tier battery \
-  --seeds data/seeds_battery --output runs/polymer/battery/1_queries
-python expand_round.py --domain polymer --last_tier battery \
-  --queries runs/polymer/battery/1_queries/queries.json --output runs/polymer/battery/2_retrieve
-python design_extraction_prompt.py --domain polymer --last_tier battery \
-  --pdf_dir runs/polymer/battery/2_retrieve/downloads --output runs/polymer/battery/schema_r1
+python prompt_pipeline.py --domain polymer --last_tier batteries \
+  --seeds data/seeds_batteries --output runs/polymer/batteries/1_queries
+python expand_round.py --domain polymer --last_tier batteries \
+  --queries runs/polymer/batteries/1_queries/queries.json --output runs/polymer/batteries/2_retrieve
+python design_extraction_prompt.py --domain polymer --last_tier batteries \
+  --pdf_dir runs/polymer/batteries/2_retrieve/downloads --output runs/polymer/batteries/schema_r1
 ```
 
 **Outputs used by Phase II:**
@@ -116,7 +118,8 @@ python design_extraction_prompt.py --domain polymer --last_tier battery \
 | `phase1/final_schemas/final_schema.json` | property vocabulary (step 6) |
 
 Polymer-specific changes in Phase I:
-- **Query generation:** disulfide and battery last tiers, with aliases.
+- **Query generation** (from `task1-queries`): polymer DomainSpec with three subdomains (`disulfide`, `batteries`, `glass_transition`), aliases, domain aspects and `POLYMER_EXTRACT_TEMPLATE`. `prompt_lib/validation.py` keeps battery queries that mention both polymer and battery terms. `evaluate_queries.py` scores generated queries with an LLM judge (standalone).
+- **Retrieval / schema / orchestrator:** the same three subdomain keys and texts in `expand_lib/domain_args.py`, `schema_lib/domain.py` and `iterative_expand.py`. Retrieval aliases are the union of both branches' aliases. The schema merge rules include one field for glass transition temperature.
 - **Schema induction:** synonym grouping runs before `min_support`, so variant wordings are not dropped. Aliases are kept in `merged_from` / `name_variants`. Sampling is section-aware instead of using the first 12k characters.
 
 ---
@@ -136,7 +139,7 @@ artifact, they only steer schema sampling and the optional `--top_n` of
 | Schema coverage | `extract_lib.retrieval.paper_relevance_signal` | Number of schema fields with a matching passage. Keep papers with `≥ --min_fields` (default 1). Optional `--top_n`. |
 
 ```bash
-python screen_papers.py --domain polymer --last_tier battery \
+python screen_papers.py --domain polymer --last_tier batteries \
   --pdf_dir RUN/01_phase1/cumulative_corpus \
   --schema_path RUN/01_phase1/final_schemas/final_schema.json --out_dir RUN/02_screen
 ```
@@ -219,8 +222,8 @@ Method-specific input notes: `extract_lib/method_instructions/{A_fulltext, B_sec
 
 ```bash
 python extract_property_records.py --method B \
-  --pdf_dir runs/polymer/battery/phase1/cumulative_corpus \
-  --out_dir runs/polymer/battery/phase2_B
+  --pdf_dir runs/polymer/batteries/phase1/cumulative_corpus \
+  --out_dir runs/polymer/batteries/phase2_B
 ```
 
 **Agent mode** (no API key; Claude subagents answer the prompts):
@@ -315,19 +318,19 @@ A thin wrapper. It runs the scripts above as subprocesses, the same way
 
 ```bash
 # full run: seeds -> Phase I -> screen -> vocab -> extract (B) -> eval
-.venv/bin/python autoschema_pipeline.py --domain polymer --last_tier battery \
-  --seed_dir data/seeds_battery --run_dir runs/polymer/battery/run_01 \
+.venv/bin/python autoschema_pipeline.py --domain polymer --last_tier batteries \
+  --seed_dir data/seeds_batteries --run_dir runs/polymer/batteries/run_01 \
   --rounds 2 --target_total_papers 30
 
 # skip Phase I: start from an existing corpus (schema / metadata optional)
-.venv/bin/python autoschema_pipeline.py --domain polymer --last_tier battery \
-  --corpus_dir data/seeds_battery --run_dir runs/polymer/battery/seeds_only \
+.venv/bin/python autoschema_pipeline.py --domain polymer --last_tier batteries \
+  --corpus_dir data/seeds_batteries --run_dir runs/polymer/batteries/seeds_only \
   --schema_path tests/polymer/battery/trial_4papers/schema/final_schema.json \
   --no_screen --methods A,B,C --llm_mode agent
 ```
 
 ```text
-runs/polymer/battery/run_01/
+runs/polymer/batteries/run_01/
 ├── 01_phase1/        iterative_expand.py → cumulative_corpus/, cumulative_metadata.jsonl, final_schemas/
 ├── 02_screen/        screen_papers.py    → screen.csv, corpus/
 ├── 03_vocab/         build_property_vocab.py → property_vocab.json, property_vocab_prompt.md

@@ -104,20 +104,34 @@ LAST_TIERS: Dict[str, LastTier] = {
         aliases=["amyloid", "amyloid-beta", "amyloid beta", "Abeta", "A-beta",
                  "APP", "APP processing", "amyloid precursor protein"],
     ),
+    # Polymer subdomains: keys and texts match prompt_lib/domain.py.
     "disulfide": LastTier(
         key="disulfide",
-        text="Disulfide-bond dynamic polymers",
-        aliases=["disulfide", "disulfide bond", "disulfide-bonded", "S-S bond",
+        text="Disulfide-containing polymers",
+        aliases=["disulfide-containing polymer", "disulfide-linked polymer",
+                 "disulfide-linked polymers", "polymers with disulfide bonds",
+                 "disulfide-functionalized polymers",
+                 "disulfide", "disulfide bond", "disulfide-bonded", "S-S bond",
                  "polysulfide", "thioctic acid", "lipoic acid",
                  "poly(thioctic acid)", "dithiolane"],
     ),
-    "battery": LastTier(
-        key="battery",
-        text="Self-healing polymer electrolytes for batteries",
-        aliases=["polymer electrolyte", "solid polymer electrolyte",
+    "batteries": LastTier(
+        key="batteries",
+        text="Polymers for battery applications",
+        aliases=["polymers for batteries", "battery polymer materials",
+                 "polymer-based battery materials",
+                 "polymer materials for battery applications",
+                 "polymer electrolytes for batteries",
+                 "polymer electrolyte", "solid polymer electrolyte",
                  "gel polymer electrolyte", "hydrogel electrolyte",
                  "lithium metal battery", "lithium-ion battery",
                  "zinc-ion battery", "ionic conductivity"],
+    ),
+    "glass_transition": LastTier(
+        key="glass_transition",
+        text="Glass transition in polymers",
+        aliases=["glass transition", "glass transition temperature",
+                 "glass transition in polymers", "polymer glass transition", "Tg"],
     ),
 }
 
@@ -154,7 +168,7 @@ DOMAINS: Dict[str, DomainSpec] = {
         arxiv_cats=_POLYMER_ARXIV_CATS,
         base_tiers=_POLYMER_BASE_TIERS,
         default_sources=_POLYMER_DEFAULT_SOURCES,
-        valid_last_tiers=["disulfide", "battery"],
+        valid_last_tiers=["disulfide", "batteries", "glass_transition"],
         default_last_tier=None,                       # MUST pass --last_tier
     ),
 }

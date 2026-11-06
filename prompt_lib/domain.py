@@ -4,13 +4,15 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional
 
+
 # ============================== Last-tier registry ==============================
 @dataclass
 class LastTier:
-    key: str # Short CLI key (cof / mof / zif / amyloid / prompt)
-    text: str # Full text appended to SPEC.tiers
-    seeds_dir: str # Default seed PDFs folder
-    aliases: List[str] # Used by validate_tiers
+    key: str  # Short CLI key (cof / mof / zif / amyloid / prompt)
+    text: str  # Full text appended to SPEC.tiers
+    seeds_dir: str  # Default seed PDFs folder
+    aliases: List[str]  # Used by validate_tiers
+
 
 LAST_TIERS: Dict[str, LastTier] = {
     "cof": LastTier(
@@ -18,8 +20,10 @@ LAST_TIERS: Dict[str, LastTier] = {
         text="Covalent Organic Frameworks (COFs)",
         seeds_dir="data/seeds_cof",
         aliases=[
-            "COF", "COFs",
-            "covalent organic framework", "covalent-organic framework",
+            "COF",
+            "COFs",
+            "covalent organic framework",
+            "covalent-organic framework",
             "covalent organic frameworks",
         ],
     ),
@@ -28,8 +32,10 @@ LAST_TIERS: Dict[str, LastTier] = {
         text="Metal-Organic Frameworks (MOFs)",
         seeds_dir="data/seeds_mof",
         aliases=[
-            "MOF", "MOFs",
-            "metal-organic framework", "metal organic framework",
+            "MOF",
+            "MOFs",
+            "metal-organic framework",
+            "metal organic framework",
             "metal-organic frameworks",
         ],
     ),
@@ -38,9 +44,45 @@ LAST_TIERS: Dict[str, LastTier] = {
         text="Zeolitic Imidazolate Frameworks (ZIFs)",
         seeds_dir="data/seeds_zif",
         aliases=[
-            "ZIF", "ZIFs",
+            "ZIF",
+            "ZIFs",
             "zeolitic imidazolate framework",
             "zeolitic imidazolate frameworks",
+        ],
+    ),
+    "disulfide": LastTier(
+        key="disulfide",
+        text="Disulfide-containing polymers",
+        seeds_dir="data/seeds_disulfide",
+        aliases=[
+            "disulfide-containing polymer",
+            "disulfide-linked polymer",
+            "disulfide-linked polymers",
+            "polymers with disulfide bonds",
+            "disulfide-functionalized polymers",
+        ],
+    ),
+    "batteries": LastTier(
+        key="batteries",
+        text="Polymers for battery applications",
+        seeds_dir="data/seeds_batteries",
+        aliases=[
+            "polymers for batteries",
+            "battery polymer materials",
+            "polymer-based battery materials",
+            "polymer materials for battery applications",
+            "polymer electrolytes for batteries",
+        ],
+    ),
+    "glass_transition": LastTier(
+        key="glass_transition",
+        text="Glass transition in polymers",
+        seeds_dir="data/seeds_glass_transition",
+        aliases=[
+            "glass transition",
+            "glass transition temperature",
+            "glass transition in polymers",
+            "polymer glass transition",
         ],
     ),
     "amyloid": LastTier(
@@ -48,10 +90,16 @@ LAST_TIERS: Dict[str, LastTier] = {
         text="Amyloid production and APP processing",
         seeds_dir="data/seeds_ad",
         aliases=[
-            "amyloid", "amyloid-beta", "amyloid beta", "Abeta", "A-beta",
-            "APP", "APP processing",
+            "amyloid",
+            "amyloid-beta",
+            "amyloid beta",
+            "Abeta",
+            "A-beta",
+            "APP",
+            "APP processing",
             "amyloid precursor protein",
-            "beta-secretase", "BACE1",
+            "beta-secretase",
+            "BACE1",
             "gamma-secretase",
         ],
     ),
@@ -60,33 +108,16 @@ LAST_TIERS: Dict[str, LastTier] = {
         text="Prompt engineering for large language models",
         seeds_dir="data/seeds_cs",
         aliases=[
-            "prompt engineering", "prompting",
-            "LLM prompt", "LLM prompting",
-            "large language model", "large language models",
-        ],
-    ),
-    "disulfide": LastTier(
-        key="disulfide",
-        text="Disulfide-bond dynamic polymers",
-        seeds_dir="data/seeds_disulfide",
-        aliases=[
-            "disulfide", "disulfide bond", "disulfide-bonded", "S-S bond",
-            "polysulfide", "thioctic acid", "lipoic acid",
-            "poly(thioctic acid)", "dithiolane",
-        ],
-    ),
-    "battery": LastTier(
-        key="battery",
-        text="Self-healing polymer electrolytes for batteries",
-        seeds_dir="data/seeds_battery",
-        aliases=[
-            "polymer electrolyte", "solid polymer electrolyte",
-            "gel polymer electrolyte", "hydrogel electrolyte",
-            "lithium metal battery", "lithium-ion battery", "zinc-ion battery",
-            "ionic conductivity",
+            "prompt engineering",
+            "prompting",
+            "LLM prompt",
+            "LLM prompting",
+            "large language model",
+            "large language models",
         ],
     ),
 }
+
 
 # ============================== DomainSpec ==============================
 @dataclass
@@ -97,7 +128,7 @@ class DomainSpec:
     system_role: str
     domain_aspects: List[str]
     extract_prompt_template: str
-    valid_last_tiers: List[str] # Subset of LAST_TIERS keys
+    valid_last_tiers: List[str]  # Subset of LAST_TIERS keys
     default_last_tier: Optional[str] = None  # None => --last_tier is REQUIRED
     required_terms: List[str] = field(default_factory=list)
     block_terms: List[str] = field(default_factory=list)
@@ -147,21 +178,24 @@ class DomainSpec:
                 f"Valid options: {self.valid_last_tiers}"
             )
         lt = LAST_TIERS[chosen]
-        self.last_tier_key     = chosen
+        self.last_tier_key = chosen
         self.last_tier_aliases = list(lt.aliases)
-        self.seeds_dir         = lt.seeds_dir
+        self.seeds_dir = lt.seeds_dir
         return self
+
 
 # ============================== Prompt builders ==============================
 def _aliases_str(spec: "DomainSpec") -> str:
     aliases = spec.last_tier_aliases or []
     return ", ".join(aliases) if aliases else spec.last_tier
 
+
 def _aspects_str(spec: "DomainSpec") -> str:
     bullets = spec.domain_aspects or [
         "any relevant theme that appears in the seed papers"
     ]
     return "\n                - ".join(bullets)
+
 
 def _build_domain_prompt(spec: DomainSpec) -> str:
     return f"""
@@ -196,6 +230,7 @@ def _build_domain_prompt(spec: DomainSpec) -> str:
         Be concise.
     """
 
+
 def _build_general_prompt(spec: DomainSpec) -> str:
     return f"""
         Return ONLY a JSON object: {{"queries":[...]}} with 10 items.
@@ -226,6 +261,7 @@ def _build_general_prompt(spec: DomainSpec) -> str:
         Be concise.
     """
 
+
 # ============================== Extraction-prompt templates ==============================
 CHEM_EXTRACT_TEMPLATE = """
     Return ONLY valid JSON. Use null or [] if unknown. No prose, no backticks.
@@ -246,6 +282,49 @@ CHEM_EXTRACT_TEMPLATE = """
 
     Text:
 `````{paper_text}```
+"""
+
+POLYMER_EXTRACT_TEMPLATE = """
+    Return ONLY valid JSON. Use null or [] if unknown.
+    No prose, no backticks.
+
+    Focus on the polymers actually studied in the paper.
+    Do not confuse background materials with studied materials:
+        - target_material lists ONLY polymers prepared or studied in THIS work
+          (usually named in the abstract or the "Herein / In this work"
+          paragraph). Do not list materials cited from prior work.
+        - Monomers, crosslinkers, initiators, salts, and solvents are
+          components (synthesis), not studied polymers.
+
+    Top-level keys MUST be exactly:
+        metadata, target_material, synthesis, properties, applications, notes
+
+    Schema:
+        - metadata: {title, authors, year, venue, doi, url}
+        - target_material: {
+            polymer_names[], polymer_family,
+            monomers[], dynamic_bonds[], dynamic_mechanisms[]
+          }
+        - synthesis: {
+            methods[], components[], crosslinking_methods[]
+          }
+        - properties: {
+            mechanical[], self_healing[], ionic_conductivity[],
+            electrochemical[], thermal[], glass_transition_temperature[],
+            testing_conditions[]
+          }
+        - applications: {
+            demonstrated[], proposed[]
+          }
+        - notes: {
+            key_findings[], limitations[]
+          }
+
+    Extract only information supported by the paper.
+    Include units and test conditions when reported.
+
+    Text:
+    ```{paper_text}```
 """
 
 CS_EXTRACT_TEMPLATE = """
@@ -299,42 +378,19 @@ AD_EXTRACT_TEMPLATE = """
 ```{paper_text}```
 """
 
-POLYMER_EXTRACT_TEMPLATE = """
-    Return ONLY valid JSON. Use null or [] if unknown. No prose, no backticks.
-
-    Top-level keys MUST be exactly:
-        metadata, target_material, synthesis, properties, biomed, notes
-
-    Schema (polymer science):
-        - metadata:        {title, authors, year, venue, doi, url}
-        - target_material: {polymer_names[], abbreviations[], polymer_class,
-                            dynamic_bond_type[]}
-        - synthesis:       {monomers[], crosslinkers[], initiators_or_catalysts[],
-                            solvents[], polymerization_method, conditions[]}
-        - properties:      {molecular_weight[], dispersity, Tg_C[], Td_C[],
-                            tensile_strength_MPa[], elongation_at_break_pct[],
-                            self_healing_efficiency_pct[], healing_conditions[],
-                            ionic_conductivity_S_cm[], other[]}
-        - biomed:          {applications[], device_performance[]}
-        - notes: []
-
-    Rules:
-        - target_material lists ONLY polymers prepared or studied in THIS work
-          (usually named in the abstract or the "Herein / In this work"
-          paragraph). Do not list materials cited from prior work.
-        - Monomers, crosslinkers, initiators, salts, and solvents belong in
-          synthesis, not target_material.
-
-    Text:
-```{paper_text}```
-"""
-
 # ============================== Domain registry ==============================
 _BASE_CHEM_TIERS = [
     "Physical sciences",
     "Chemistry",
     "Materials chemistry",
     "Porous materials",
+]
+
+_BASE_POLYMER_TIERS = [
+    "Physical sciences",
+    "Chemistry",
+    "Materials chemistry",
+    "Polymers",
 ]
 
 _BASE_CS_TIERS = [
@@ -350,28 +406,21 @@ _BASE_AD_TIERS = [
     "Alzheimer's disease",
 ]
 
-_BASE_POLYMER_TIERS = [
-    "Physical sciences",
-    "Chemistry",
-    "Polymer chemistry",
-    "Self-healing and dynamic polymers",
-]
-
-_POLYMER_DOMAIN_ASPECTS = [
-    "how the polymer is synthesized (monomers, dynamic bonds, crosslinking)",
-    "how its structure and molecular weight are characterized",
-    "how its self-healing, recyclability, or dynamic behavior is evaluated",
-    "how its mechanical, thermal, or electrochemical properties are measured",
-    "how it is applied (adhesives, actuators, electrolytes, devices)",
-    "any other important themes that appear in the seed papers",
-]
-
 _CHEM_DOMAIN_ASPECTS = [
     "how it is synthesized or prepared",
     "how its structure or composition is characterized",
     "how its stability or degradation is evaluated",
     "how its physical/chemical properties or performance are measured",
     "how it is applied in different contexts",
+    "any other important themes that appear in the seed papers",
+]
+
+_POLYMER_DOMAIN_ASPECTS = [
+    "how relevant polymers are synthesized, processed, or prepared",
+    "how polymer composition, chemical structure, and bonding are characterized",
+    "how thermal, mechanical, transport, or electrochemical properties are measured, where relevant",
+    "how experimental conditions and characterization methods affect reported results",
+    "how the polymers are used and evaluated in their target applications",
     "any other important themes that appear in the seed papers",
 ]
 
@@ -402,7 +451,17 @@ DOMAINS: Dict[str, DomainSpec] = {
         domain_aspects=_CHEM_DOMAIN_ASPECTS,
         extract_prompt_template=CHEM_EXTRACT_TEMPLATE,
         valid_last_tiers=["cof", "mof", "zif"],
-        default_last_tier=None,                 # --last_tier is REQUIRED
+        default_last_tier=None,  # --last_tier is REQUIRED
+    ),
+    "polymer": DomainSpec(
+        domain_key="polymer",
+        base_tiers=_BASE_POLYMER_TIERS,
+        arxiv_bool="(cat:cond-mat.mtrl-sci OR cat:physics.chem-ph)",
+        system_role="polymer materials",
+        domain_aspects=_POLYMER_DOMAIN_ASPECTS,
+        extract_prompt_template=POLYMER_EXTRACT_TEMPLATE,
+        valid_last_tiers=["disulfide", "batteries", "glass_transition"],
+        default_last_tier=None,
     ),
     "cs": DomainSpec(
         domain_key="cs",
@@ -424,30 +483,25 @@ DOMAINS: Dict[str, DomainSpec] = {
         valid_last_tiers=["amyloid"],
         default_last_tier="amyloid",
     ),
-    "polymer": DomainSpec(
-        domain_key="polymer",
-        base_tiers=_BASE_POLYMER_TIERS,
-        arxiv_bool="(cat:cond-mat.soft OR cat:cond-mat.mtrl-sci OR cat:physics.chem-ph)",
-        system_role="polymer science / materials",
-        domain_aspects=_POLYMER_DOMAIN_ASPECTS,
-        extract_prompt_template=POLYMER_EXTRACT_TEMPLATE,
-        valid_last_tiers=["disulfide", "battery"],
-        default_last_tier=None,                 # --last_tier is REQUIRED
-    ),
 }
+
 
 # ============================== CLI parsing ==============================
 def _parse_cli() -> argparse.Namespace:
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--domain", choices=list(DOMAINS.keys()))
     parser.add_argument(
-        "--last_tier", "--last-tier",
-        dest="last_tier", type=str, default=None,
+        "--last_tier",
+        "--last-tier",
+        dest="last_tier",
+        type=str,
+        default=None,
         help="Last-tier key: one of cof / mof / zif / amyloid / prompt / "
-             "disulfide / battery.",
+             "disulfide / batteries / glass_transition.",
     )
     args, _ = parser.parse_known_args()
     return args
+
 
 def get_domain() -> str:
     env = os.getenv("DOMAIN")
@@ -459,15 +513,17 @@ def get_domain() -> str:
         )
     return chosen
 
+
 def get_last_tier_key() -> Optional[str]:
     env = os.getenv("LAST_TIER")
     cli = _parse_cli()
     val = cli.last_tier or env
     return val.lower() if val else None
 
+
 # ============================== Module-level resolved SPEC ==============================
 DOMAIN = get_domain()
-SPEC   = DOMAINS[DOMAIN].resolve(get_last_tier_key())
+SPEC = DOMAINS[DOMAIN].resolve(get_last_tier_key())
 
 DATA_DIR = Path(SPEC.seeds_dir)
 _OUTPUT_ROOT = os.getenv("AUTOSCHEMA_OUTPUT_DIR", "output")

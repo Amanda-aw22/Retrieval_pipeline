@@ -30,7 +30,15 @@ def validate_tiers(item: dict, qb_final: str, DOMAIN: str, SPEC=None) -> bool:
         keywords = [k for k in keywords if k]
         if keywords:
             haystack = _haystack(item, qb_final)
-            if not any(k.lower() in haystack for k in keywords):
+            matched = any(k.lower() in haystack for k in keywords)
+
+            if DOMAIN == "polymer" and SPEC.last_tier_key == "batteries":
+                import re
+                polymer_match = re.search(r"\bpolymer(?:s|ic)?\b", haystack)
+                battery_match = re.search(r"\bbatter(?:y|ies)\b", haystack)
+                matched = matched or bool(polymer_match and battery_match)
+
+            if not matched:
                 return False
 
     # 3. Optional block-terms.

@@ -29,7 +29,7 @@ The public artifact intentionally removes ACS browser-based downloading because 
 | `chem` | `cof` / `mof` / `zif` | COF is the main benchmark; MOF/ZIF are chemistry transfer checks |
 | `ad` | `amyloid` default | preliminary biomedical transfer check |
 | `cs` | `prompt` default | query generation + retrieval only |
-| `polymer` | `disulfide` / `battery` | self-healing / dynamic polymers (lab extension; seed list in `data/README.md`) |
+| `polymer` | `disulfide` / `batteries` / `glass_transition` | polymer lab extension (seed list in `data/README.md`; query generation: `QUERY_GENERATION_README.md`) |
 
 For `chem` and `polymer`, `--last_tier` is required. For `ad` and `cs`, it is optional.
 
@@ -158,7 +158,7 @@ python prompt_pipeline.py --domain chem --last_tier zif --seeds data/seeds_ZIF -
 python prompt_pipeline.py --domain ad --seeds data/seeds_ad --output tests/ad/queries
 python prompt_pipeline.py --domain cs --seeds data/seeds_prompt --output tests/cs/queries
 python prompt_pipeline.py --domain polymer --last_tier disulfide --seeds data/seeds_disulfide --output tests/polymer/disulfide_queries
-python prompt_pipeline.py --domain polymer --last_tier battery --seeds data/seeds_battery --output tests/polymer/battery_queries
+python prompt_pipeline.py --domain polymer --last_tier batteries --seeds data/seeds_batteries --output tests/polymer/batteries_queries
 ```
 
 Outputs include:

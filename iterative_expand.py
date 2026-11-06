@@ -15,7 +15,7 @@ DOMAIN_LAST_TIERS: Dict[str, Dict[str, Any]] = {
     "chem": {"valid": ["cof", "mof", "zif"], "default": None},
     "ad":   {"valid": ["amyloid"],            "default": "amyloid"},
     "cs":   {"valid": ["prompt"],             "default": "prompt"},
-    "polymer": {"valid": ["disulfide", "battery"], "default": None},
+    "polymer": {"valid": ["disulfide", "batteries", "glass_transition"], "default": None},
 }
 
 LAST_TIER_TEXT: Dict[str, str] = {
@@ -24,8 +24,9 @@ LAST_TIER_TEXT: Dict[str, str] = {
     "zif":       "Zeolitic Imidazolate Frameworks (ZIFs)",
     "amyloid":   "Amyloid production and APP processing",
     "prompt":    "Prompt engineering for large language models",
-    "disulfide": "Disulfide-bond dynamic polymers",
-    "battery":   "Self-healing polymer electrolytes for batteries",
+    "disulfide":        "Disulfide-containing polymers",
+    "batteries":        "Polymers for battery applications",
+    "glass_transition": "Glass transition in polymers",
 }
 
 SCHEMA_INDUCTION_DOMAINS: Set[str] = {"chem", "ad", "polymer"}
@@ -784,9 +785,9 @@ def _make_parser() -> argparse.ArgumentParser:
     p.add_argument("--last_tier", "--last-tier",
                    dest="last_tier", default=None,
                    choices=["cof", "mof", "zif", "amyloid", "prompt",
-                            "disulfide", "battery"],
+                            "disulfide", "batteries", "glass_transition"],
                    help="Required for chem (cof|mof|zif) and polymer "
-                        "(disulfide|battery); defaults for ad/cs.")
+                        "(disulfide|batteries|glass_transition); defaults for ad/cs.")
     p.add_argument("--seed_dir", required=True,
                    help="Folder of seed PDFs used in round 1.")
     p.add_argument("--output_root", default=None,

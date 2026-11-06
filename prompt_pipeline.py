@@ -183,7 +183,7 @@ def main():
         type=str,
         default=None,
         help="Last-tier key: cof | mof | zif (required for --domain chem); "
-             "disulfide | battery (required for --domain polymer); "
+             "disulfide | batteries | glass_transition (required for --domain polymer); "
              "amyloid (default for --domain ad); prompt (default for --domain cs).",
     )
     parser.add_argument(

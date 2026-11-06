@@ -24,12 +24,12 @@ LLM modes:
 
 Examples:
   # full run
-  python autoschema_pipeline.py --domain polymer --last_tier battery \\
-      --seed_dir data/seeds_battery --run_dir runs/polymer/battery/run_01
+  python autoschema_pipeline.py --domain polymer --last_tier batteries \\
+      --seed_dir data/seeds_batteries --run_dir runs/polymer/batteries/run_01
 
   # skip Phase I: use an existing corpus (and optionally schema / metadata)
-  python autoschema_pipeline.py --domain polymer --last_tier battery \\
-      --corpus_dir data/seeds_battery --run_dir runs/polymer/battery/seeds_only \\
+  python autoschema_pipeline.py --domain polymer --last_tier batteries \\
+      --corpus_dir data/seeds_batteries --run_dir runs/polymer/batteries/seeds_only \\
       --schema_path tests/polymer/battery/trial_4papers/schema/final_schema.json \\
       --llm_mode agent --no_screen
 """
