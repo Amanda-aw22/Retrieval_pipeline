@@ -6,7 +6,7 @@ literature (disulfide-bond dynamic polymers; self-healing polymer electrolytes f
 batteries) and replaces the per-field table output of Phase II with
 **evidence-grounded property records**: one row per measured value.
 
-> **Status legend.** ✅ implemented and tested · ⚠️ implemented; needs API keys for a real run.
+> **Status legend.** ✅ implemented and tested. Every step runs without an API key in agent mode (`--llm_mode agent`, §7).
 
 ---
 
@@ -15,10 +15,10 @@ batteries) and replaces the per-field table output of Phase II with
 ```
 seed PDFs
   │  Phase I — corpus building (original AutoSchema, unchanged)
-  ├─ 1. Query generation      prompt_pipeline.py            ⚠️
-  ├─ 2. Retrieval + download  expand_round.py               ⚠️
-  ├─ 3. Iterative expansion   iterative_expand.py           ⚠️  (dedup, top-off, seed refresh)
-  ├─ 4. Schema induction      design_extraction_prompt.py   ⚠️  (per round, frozen at the end)
+  ├─ 1. Query generation      prompt_pipeline.py            ✅
+  ├─ 2. Retrieval + download  expand_round.py               ✅
+  ├─ 3. Iterative expansion   iterative_expand.py           ✅  (dedup, top-off, seed refresh)
+  ├─ 4. Schema induction      design_extraction_prompt.py   ✅  (per round, frozen at the end)
   │
   │  Bridge
   ├─ 5. Paper screening       screen_papers.py              ✅  (old-pipeline relevance signals)
@@ -58,7 +58,7 @@ The new pipeline keeps the original design. Each step maps one to one:
 
 ```bash
 python -m venv .venv && .venv/bin/pip install -r requirements.txt
-cp .env.example .env        # API keys; required for Phase I and for Phase II in API mode
+cp .env.example .env        # API keys; only for --llm_mode api (agent mode needs none)
 ```
 
 Run every command with the project environment (`.venv/bin/python ...`). Without
@@ -97,6 +97,12 @@ python iterative_expand.py \
   --max_schema_papers 18 --max_chars_per_paper 12000 \
   --sources openalex,nature,core
 ```
+
+Add `--llm_mode agent` to run without an API key (see §7, *Agent mode*). The
+LLM prompts then go to `<output_root>/agent_llm/prompts/`, and the run continues
+when the answers are in `agent_llm/responses/`. Finished rounds are not rerun.
+A round whose corpus is built skips retrieval when it resumes, so no paper is
+downloaded or counted twice.
 
 **Or run the steps one at a time:**
 
@@ -373,11 +379,22 @@ uses topic relevance and extraction uses the built-in vocabulary.
 
 ### Agent mode (`--llm_mode agent`)
 
-1. The pipeline writes the extraction prompts and stops with **exit code 3**. It prints the path of `prompts*/manifest.json`; every entry gives a `prompt` file and the `response` path to write.
-2. Answer each prompt, for example with Claude subagents, and write the JSON answer to its `response` path.
-3. Rerun the same command. Method C stops twice: once for step 1 (the sample inventory) and once for step 2 (one prompt per sample).
+No API key is needed for any step.
 
-Phase I and screening always use `.env`. Without an embedding key, screening falls back to keyword overlap.
+1. The pipeline writes the LLM prompts and stops with **exit code 3**. It prints the path of a `manifest.json`; every entry gives a `prompt` file and the `response` path to write.
+2. Answer each prompt, for example with Claude subagents, and write the answer to its `response` path.
+3. Rerun the same command. The run continues until the next LLM call that has no answer yet.
+
+Where the prompts are:
+
+| Step | Manifest | Answer format |
+|---|---|---|
+| Phase I | `01_phase1/agent_llm/manifest.json` | raw model text (one JSON object) in `responses/<same name>.txt` |
+| Extraction | `04_records/<M>/prompts*/manifest.json` | JSON in `responses*/<paper>.json` |
+
+Phase I prompts are named by a hash of their content, so an answer is reused for as long as its prompt is unchanged. Prompts that are independent of each other are written together: the 5 seed snapshots, and the per-paper schema proposals. A one-round Phase I run therefore stops 5 times: seed snapshots, queries, per-paper schema fields, synonym grouping, and the final schema merge. Method C stops twice in extraction: once for step 1 (the sample inventory) and once for step 2 (one prompt per sample).
+
+Without an embedding key, schema sampling, seed refresh and screening fall back to keyword overlap. `iterative_expand.py --llm_mode agent` and `AUTOSCHEMA_LLM_MODE=agent` (with `AUTOSCHEMA_AGENT_DIR`) work outside the pipeline as well.
 
 ### Tested
 
@@ -386,7 +403,7 @@ All tests used `.venv`, with saved v2 answers standing in for the agents:
 - **Method B**: stopped with 0/2 answers, then 1/2; finished once 2/2 were present (83 records, all evidence verified). A third run skipped every step.
 - **Method C**: stopped at `C1`, then at `C2`; then finished (75 records).
 - **`--redo eval`**: reran only the evaluation.
-- **Phase I**: `iterative_expand.py → prompt_pipeline.py` started with the correct arguments. It stopped because `.env` has no `CHAT_API_KEY`, and the manifest recorded `failed` with the reason.
+- **Phase I, agent mode, no API key** (batteries seeds, 1 round, 6 papers): it stopped 5 times (5 seed prompts, 1 query prompt, 4 per-paper schema prompts, synonym grouping, merge), with Claude subagents answering. On each rerun the earlier answers were reused, and the round's retrieval was not repeated: `cumulative_metadata.jsonl` stayed at 6 lines. The schema was then frozen, and screening and the vocabulary ran. Extraction stopped waiting for method B.
 
 ## 8. File map
 

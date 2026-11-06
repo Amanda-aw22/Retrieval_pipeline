@@ -4,7 +4,7 @@ import json, re
 from collections import defaultdict
 from typing import Any, Dict, List, Tuple
 
-from prompt_lib.llm_client import llm_chat
+from prompt_lib.llm_client import agent_checkpoint, llm_chat
 from .domain import SchemaDomainSpec
 
 # Per-paper LLM proposal
@@ -70,21 +70,16 @@ def propose_candidate_fields_per_paper(
 ) -> List[Dict[str, Any]]:
     """papers items use 'text_for_proposal' (the larger excerpt)."""
     proposals: List[Dict[str, Any]] = []
-    for paper in papers:
-        text = paper.get("text_for_proposal") or paper.get("text") or ""
-        prompt = _per_paper_prompt(
-            spec=spec,
-            last_tier_text=last_tier_text,
-            paper_text=text,
-            max_fields=max_fields_per_paper,
-        )
-        raw = llm_chat(
-            [
-                {"role": "system", "content": _PER_PAPER_SYSTEM},
-                {"role": "user",   "content": prompt},
-            ],
-            force_json=True,
-        )
+    raws = [llm_chat(
+                [{"role": "system", "content": _PER_PAPER_SYSTEM},
+                 {"role": "user", "content": _per_paper_prompt(
+                     spec=spec, last_tier_text=last_tier_text,
+                     paper_text=paper.get("text_for_proposal") or paper.get("text") or "",
+                     max_fields=max_fields_per_paper)}],
+                force_json=True, defer=True)
+            for paper in papers]
+    agent_checkpoint()          # agent mode: all per-paper prompts are written at once
+    for paper, raw in zip(papers, raws):
         try:
             obj = json.loads(raw)
             fields = obj.get("fields", []) if isinstance(obj, dict) else []

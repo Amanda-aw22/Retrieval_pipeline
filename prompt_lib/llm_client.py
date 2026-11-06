@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import time
@@ -178,9 +179,70 @@ def _chat_model_arg(cfg: LLMConfig) -> str:
 def _embedding_model_arg(cfg: LLMConfig) -> str:
     return cfg.embedding_deployment if cfg.provider == "azure_openai" else cfg.embedding_model
 
+# ======================== Agent mode (no API key) ========================
+# AUTOSCHEMA_LLM_MODE=agent: no API call. Each prompt is keyed by a hash of its
+# messages; the answer is read from $AUTOSCHEMA_AGENT_DIR/responses/<key>.txt.
+# A missing answer writes prompts/<key>.txt + manifest.json and exits with
+# AGENT_WAITING, so whoever answers the prompts (e.g. Claude subagents) can
+# rerun the same command and continue where it stopped.
+AGENT_WAITING = 3
+_PENDING: List[str] = []
+
+def agent_mode() -> bool:
+    return os.getenv("AUTOSCHEMA_LLM_MODE", "api").lower() == "agent"
+
+def _agent_dir() -> Path:
+    return Path(os.getenv("AUTOSCHEMA_AGENT_DIR") or "runs/agent_llm")
+
+def _agent_key(messages: List[Dict[str, str]], force_json: bool) -> str:
+    blob = json.dumps({"messages": messages, "json": force_json},
+                      ensure_ascii=False, sort_keys=True)
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:20]
+
+def _write_agent_manifest() -> Path:
+    d = _agent_dir()
+    rows = [{"prompt": str(f), "response": str(d / "responses" / f"{f.stem}.txt")}
+            for f in sorted((d / "prompts").glob("*.txt"))
+            if not (d / "responses" / f"{f.stem}.txt").exists()]
+    path = d / "manifest.json"
+    path.write_text(json.dumps(rows, indent=2, ensure_ascii=False), encoding="utf-8")
+    return path
+
+def agent_checkpoint() -> None:
+    """Exit if prompts deferred with llm_chat(defer=True) are still unanswered."""
+    if _PENDING:
+        man = _write_agent_manifest()
+        print(f"[agent] {len(_PENDING)} prompt(s) waiting for answers; manifest: {man}")
+        raise SystemExit(AGENT_WAITING)
+
+def _agent_chat(messages: List[Dict[str, str]], force_json: bool, defer: bool) -> str:
+    d = _agent_dir()
+    key = _agent_key(messages, force_json)
+    answer = d / "responses" / f"{key}.txt"
+    if answer.exists():
+        return answer.read_text(encoding="utf-8")
+    prompt = d / "prompts" / f"{key}.txt"
+    prompt.parent.mkdir(parents=True, exist_ok=True)
+    (d / "responses").mkdir(exist_ok=True)
+    body = "\n\n".join(f"=== {m['role'].upper()} ===\n{m['content']}" for m in messages)
+    if force_json:
+        body += "\n\n=== ANSWER FORMAT ===\nReturn ONLY one valid JSON object."
+    prompt.write_text(body, encoding="utf-8")
+    _PENDING.append(key)
+    if defer:
+        return "{}"            # placeholder; agent_checkpoint() exits before it is used
+    agent_checkpoint()
+    return "{}"
+
 # ======================== Public helpers ========================
-def llm_chat(messages: List[Dict[str, str]], force_json: bool = False) -> str:
-    """Provider-agnostic chat completion with retries."""
+def llm_chat(messages: List[Dict[str, str]], force_json: bool = False,
+             defer: bool = False) -> str:
+    """Provider-agnostic chat completion with retries.
+
+    defer=True (agent mode only): on a missing answer, return a placeholder and
+    keep going; the caller must call agent_checkpoint() after its batch."""
+    if agent_mode():
+        return _agent_chat(messages, force_json, defer)
     from openai import APIError, RateLimitError, APIConnectionError
     try:                                                        # SDK >= 1.0
         from openai import APITimeoutError as _TimeoutErr

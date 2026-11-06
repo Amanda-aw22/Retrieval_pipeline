@@ -15,7 +15,7 @@ except ImportError:
 from prompt_lib.domain import SPEC, DOMAIN
 from prompt_lib.validation import validate_tiers
 from prompt_lib.paper_model import Paper, pdf_to_text
-from prompt_lib.llm_client import llm_chat, get_config
+from prompt_lib.llm_client import agent_checkpoint, agent_mode, llm_chat, get_config
 
 # ================== arXiv-style category filter ==================
 def inject_arxiv_cats(qb: str) -> str:
@@ -58,6 +58,7 @@ def build_queries_from_seed_pdfs(
 
     # 1. Extract structured snapshots from seed PDFs
     papers: List[Paper] = []
+    answers = []
     for pdf in seed_pdfs[:5]:
         dest = seeds_dir / pdf.name
         if not dest.exists():
@@ -73,10 +74,14 @@ def build_queries_from_seed_pdfs(
                 {"role": "user",
                  "content": SPEC.extract_prompt.replace("{paper_text}", text)},
             ],
-            force_json=True,
+            force_json=True, defer=True,
         )
-        time.sleep(1)
+        if not agent_mode():
+            time.sleep(1)
+        answers.append((txt_path, extracted_raw))
+    agent_checkpoint()          # agent mode: all seed prompts are written at once
 
+    for txt_path, extracted_raw in answers:
         try:
             extracted = json.loads(extracted_raw)
         except Exception:
@@ -111,7 +116,8 @@ def build_queries_from_seed_pdfs(
             ],
             force_json=True,
         )
-        time.sleep(1)
+        if not agent_mode():
+            time.sleep(1)
         try:
             obj = json.loads(raw)
             return obj.get("queries", [])

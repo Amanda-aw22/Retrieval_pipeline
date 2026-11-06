@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import argparse, json, math, random, re, shutil, subprocess, sys
+import argparse, json, math, os, random, re, shutil, subprocess, sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -30,6 +30,8 @@ LAST_TIER_TEXT: Dict[str, str] = {
 }
 
 SCHEMA_INDUCTION_DOMAINS: Set[str] = {"chem", "ad", "polymer"}
+
+AGENT_WAITING = 3   # exit code: --llm_mode agent is waiting for answers (prompt_lib.llm_client)
 
 def _resolve_domain(args) -> Tuple[str, str]:
     """Returns (last_tier_key, last_tier_text). Same contract as the frozen modules."""
@@ -93,6 +95,10 @@ def _run_subproc(args: List[str], *, env=None) -> None:
     cmd = [sys.executable] + args
     print(f"[orch] $ {' '.join(cmd)}")
     res = subprocess.run(cmd, env=env)
+    if res.returncode == AGENT_WAITING:
+        print("[orch] waiting for agent answers; rerun the same command after "
+              "they are written.")
+        raise SystemExit(AGENT_WAITING)
     if res.returncode != 0:
         raise SystemExit(
             f"[orch] subprocess failed (exit {res.returncode}): {' '.join(cmd)}"
@@ -495,19 +501,11 @@ def _do_schema(
         cmd += ["--prev_schema", str(prev_schema)]
     _run_subproc(cmd)
 
-# Round driver
-def run_one_round(
-    *, round_idx: int, args, last_tier_key: str, last_tier_text: str,
-    seed_dir: Path, prev_schema: Optional[Path],
-    history_keys: Set[str], output_root: Path,
-) -> Dict[str, Any]:
-    round_dir = output_root / f"round_{round_idx:02d}"
-    round_dir.mkdir(parents=True, exist_ok=True)
-    print(f"\n========== ROUND {round_idx} ==========")
-    print(f"[orch] round_dir   = {round_dir}")
-    print(f"[orch] seed_dir    = {seed_dir}")
-    print(f"[orch] prev_schema = {prev_schema}")
-
+# Round steps 1-7: seeds -> queries -> retrieval -> dedup/top-off -> corpus
+def _build_round_corpus(
+    *, round_idx: int, args, last_tier_key: str, seed_dir: Path,
+    history_keys: Set[str], round_dir: Path, output_root: Path,
+) -> Tuple[List[Dict[str, Any]], int, bool]:
     # ---- 1. Stage seeds (cap at max_seed_pdfs) ----
     seeds = _cap_seeds(seed_dir, args.max_seed_pdfs, args.seed)
     if not seeds:
@@ -711,6 +709,48 @@ def run_one_round(
         for r in final_accepted:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
 
+    return final_accepted, dup_count, topoff_warning
+
+# Round driver
+def run_one_round(
+    *, round_idx: int, args, last_tier_key: str, last_tier_text: str,
+    seed_dir: Path, prev_schema: Optional[Path],
+    history_keys: Set[str], output_root: Path,
+) -> Dict[str, Any]:
+    round_dir = output_root / f"round_{round_idx:02d}"
+    round_dir.mkdir(parents=True, exist_ok=True)
+    print(f"\n========== ROUND {round_idx} ==========")
+    print(f"[orch] round_dir   = {round_dir}")
+    print(f"[orch] seed_dir    = {seed_dir}")
+    print(f"[orch] prev_schema = {prev_schema}")
+
+    # Resume: a finished round is not run again; a round whose corpus is built
+    # (e.g. stopped while waiting for agent answers on the schema) skips
+    # retrieval, so its papers are not fetched or counted twice.
+    done = round_dir / "round_done.json"
+    if done.exists():
+        info = json.loads(done.read_text(encoding="utf-8"))
+        print(f"[orch] round {round_idx} already finished -> {done}")
+        for k in ("round_dir", "schema_dir", "final_schema_path", "next_seeds_dir"):
+            info[k] = Path(info[k]) if info.get(k) else None
+        return info
+    corpus_done = round_dir / "corpus_done.json"
+    if corpus_done.exists():
+        state = json.loads(corpus_done.read_text(encoding="utf-8"))
+        final_accepted = _read_jsonl(round_dir / "accepted_metadata.jsonl")
+        dup_count, topoff_warning = state["duplicates"], state["topoff_warning"]
+        print(f"[orch] round {round_idx} corpus already built "
+              f"({len(final_accepted)} accepted) -> skipping retrieval")
+    else:
+        final_accepted, dup_count, topoff_warning = _build_round_corpus(
+            round_idx=round_idx, args=args, last_tier_key=last_tier_key,
+            seed_dir=seed_dir, history_keys=history_keys,
+            round_dir=round_dir, output_root=output_root)
+        corpus_done.write_text(json.dumps(
+            {"duplicates": dup_count, "topoff_warning": topoff_warning}), encoding="utf-8")
+    round_downloads = round_dir / "downloads"
+    cumulative_corpus = output_root / "cumulative_corpus"
+
     # ---- 8. Schema induction ----
     schema_dir = round_dir / "schema"
     final_schema_path: Optional[Path] = None
@@ -765,7 +805,7 @@ def run_one_round(
     print(f"[orch] next_seeds  = {len(picked)} PDFs -> {next_seeds_dir} "
           f"(scoring in {round_dir / 'seed_refresh_scores.json'})")
 
-    return {
+    info = {
         "round_dir":               round_dir,
         "schema_dir":              schema_dir if final_schema_path else None,
         "final_schema_path":       final_schema_path,
@@ -774,6 +814,9 @@ def run_one_round(
         "duplicates":              dup_count,
         "topoff_warning":          topoff_warning,
     }
+    done.write_text(json.dumps({k: str(v) if isinstance(v, Path) else v
+                                for k, v in info.items()}, indent=2), encoding="utf-8")
+    return info
 
 # CLI
 def _make_parser() -> argparse.ArgumentParser:
@@ -788,6 +831,11 @@ def _make_parser() -> argparse.ArgumentParser:
                             "disulfide", "batteries", "glass_transition"],
                    help="Required for chem (cof|mof|zif) and polymer "
                         "(disulfide|batteries|glass_transition); defaults for ad/cs.")
+    p.add_argument("--llm_mode", choices=["api", "agent"], default=None,
+                   help="api: call the chat API (needs CHAT_API_KEY). agent: write "
+                        "prompts to OUTPUT_ROOT/agent_llm/prompts and exit with code 3 "
+                        "until answers are in agent_llm/responses; rerun to continue. "
+                        "Default: $AUTOSCHEMA_LLM_MODE or api.")
     p.add_argument("--seed_dir", required=True,
                    help="Folder of seed PDFs used in round 1.")
     p.add_argument("--output_root", default=None,
@@ -851,6 +899,12 @@ def main():
     else:
         output_root = Path(f"runs/{args.domain}/{last_tier_key}/iterative_phase1")
     output_root.mkdir(parents=True, exist_ok=True)
+    # Subprocesses (prompt_pipeline / design_extraction_prompt) inherit these.
+    if args.llm_mode:
+        os.environ["AUTOSCHEMA_LLM_MODE"] = args.llm_mode
+    if os.environ.get("AUTOSCHEMA_LLM_MODE", "api") == "agent":
+        os.environ.setdefault("AUTOSCHEMA_AGENT_DIR", str(output_root / "agent_llm"))
+        print(f"[orch] llm_mode=agent  prompts/answers in {os.environ['AUTOSCHEMA_AGENT_DIR']}")
     (output_root / "cumulative_corpus").mkdir(exist_ok=True)
     cum_meta = output_root / "cumulative_metadata.jsonl"
     if not cum_meta.exists():

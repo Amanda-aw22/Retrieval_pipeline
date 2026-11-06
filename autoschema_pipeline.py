@@ -16,11 +16,14 @@ disk are reused, so only missing papers are sent to the LLM.
 
 LLM modes:
   --llm_mode api    (default) call the LLM configured in .env
-  --llm_mode agent  extraction prompts are written to files and the pipeline
-                    stops (exit code 3); answer every prompt listed in the
-                    printed manifest.json (e.g. with Claude subagents), then
-                    rerun the same command to continue. Phase I and screening
-                    always use .env (embeddings fall back to keywords).
+  --llm_mode agent  no API key needed. LLM prompts (Phase I queries / schema
+                    and Phase II extraction) are written to files and the
+                    pipeline stops (exit code 3); answer every prompt listed in
+                    the printed manifest.json (e.g. with Claude subagents),
+                    then rerun the same command to continue. Without an
+                    embedding key, relevance scoring falls back to keywords.
+                    Phase I prompts: 01_phase1/agent_llm/{prompts,responses}/
+                    (answer = raw model text in responses/<same name>.txt).
 
 Examples:
   # full run
@@ -160,7 +163,13 @@ def step_phase1(a, run_dir: Path, man: Manifest) -> Dict[str, Any]:
                  "max_chars_per_paper", "max_final_fields", "min_support", "sources"):
         if getattr(a, name) is not None:
             cmd += [f"--{name}", getattr(a, name)]
-    _run("iterative_expand.py", *cmd)
+    cmd += ["--llm_mode", a.llm_mode]
+    try:
+        _run("iterative_expand.py", *cmd)
+    except StepFailed as e:
+        if f"code {WAITING}" in str(e):
+            raise Wait(str(out / "agent_llm" / "manifest.json"))
+        raise
     return {"mode": "iterative_expand", "corpus": str(out / "cumulative_corpus"),
             "schema": _existing(out / "final_schemas" / "final_schema.json"),
             "metadata": _existing(out / "cumulative_metadata.jsonl")}
