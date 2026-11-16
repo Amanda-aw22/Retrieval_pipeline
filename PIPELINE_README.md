@@ -50,7 +50,7 @@ The new pipeline keeps the original design. Each step maps one to one:
 **What changes:** (1) output unit: `paper × field` cell → `sample × property × value × condition` record;
 (2) the schema becomes a vocabulary of property names instead of the column set;
 (3) traceability for sample and test condition; (4) method comparison and evaluation;
-(5) LLM calls can run through Claude subagents instead of an API (Phase II only).
+(5) every LLM call (Phase I and Phase II) can run through Claude subagents instead of an API.
 
 ---
 
