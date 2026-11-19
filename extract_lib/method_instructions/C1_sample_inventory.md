@@ -4,13 +4,17 @@ You are given numbered, labeled passages from ONE research paper, e.g.
 `[Passage 12 | page 5 | Results | 3.2 Mechanical properties | cites prior work]`.
 References and acknowledgements have been removed.
 
-Task: list every distinct polymer / sample / formulation in the paper for which
-at least one property value is reported. Do NOT extract property values in
-this step — only identify the samples.
+Task: list every distinct candidate polymer / sample / formulation the paper
+mentions, whether or not a property value is reported for it. Do NOT extract
+property values in this step — only identify the polymers.
 
 ## What is one sample
 
-- One entry per distinct material the paper measures. Variants of the paper's
+- One entry per distinct polymer or polymer-based material the paper
+  mentions, including ones that are only synthesized, characterized
+  qualitatively or cited. Reagents (monomers, crosslinkers, initiators,
+  catalysts, salts, solvents, small molecules, inorganic fillers) are not
+  listed. Variants of the paper's
   material are separate samples when the paper reports values for them
   separately: different formulations, compositions, molecular weights,
   crosslink ratios, processing (e.g. `MLCE-1`, `MLCE-2`, `MLCE-3`;
@@ -33,8 +37,8 @@ this step — only identify the samples.
 | `evidence` | Verbatim quote (≤ 40 words) that defines or introduces the sample. |
 | `passage` | Passage number of that quote. |
 
-List `control` and `prior_work` samples too (they help step 2 avoid assigning
-their values to the paper's own samples); they are not extracted later.
+List `control` and `prior_work` samples too. Step 2 extracts values for every
+`this_work` and `control` sample; `prior_work` samples are listed only.
 
 Review articles: if the paper only summarizes other work, every sample is
 `prior_work` (or return an empty list).

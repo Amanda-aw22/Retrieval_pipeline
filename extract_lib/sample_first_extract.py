@@ -3,7 +3,7 @@
 Step 1 (one call per paper): list every sample with its aliases and role
         (this_work / control / prior_work). Instructions:
         method_instructions/C1_sample_inventory.md
-Step 2 (one call per this_work sample): only the passages that mention the
+Step 2 (one call per this_work / control sample): only the passages that mention the
         sample (by name or alias), plus the abstract / "Herein" anchors and
         the passage that defines it; extract records for that sample only.
         Instructions: method_instructions/C2_sample_properties.md + shared rules.
@@ -16,7 +16,7 @@ import re, unicodedata
 from typing import Any, Dict, List, Sequence, Tuple
 
 from extract_lib.record_extract import (
-    METHOD_DIR, _norm, load_instructions, render_passages,
+    METHOD_DIR, _norm, load_instructions, parse_polymers, render_passages,
 )
 from extract_lib.retrieval import Paragraph
 
@@ -41,30 +41,12 @@ def build_inventory_prompt(paper_id: str, paras: Sequence[Paragraph]) -> Tuple[s
 def parse_inventory(raw: Dict[str, Any]) -> Dict[str, Any]:
     """Clean the step-1 answer. Duplicate names are folded into one entry
     (aliases unioned) so each sample has one umbrella name."""
-    by_name: Dict[str, Dict[str, Any]] = {}
-    for s in raw.get("samples") or []:
-        if not isinstance(s, dict) or not str(s.get("name") or "").strip():
-            continue
-        name = " ".join(str(s["name"]).split())
-        aliases = [" ".join(str(a).split()) for a in (s.get("aliases") or [])
-                   if str(a).strip() and " ".join(str(a).split()) != name]
-        role = str(s.get("role") or "this_work").strip().lower()
-        entry = by_name.setdefault(name, {
-            "name": name, "aliases": [],
-            "description": str(s.get("description") or "").strip(),
-            "material_class": str(s.get("material_class") or "").strip(),
-            "role": role if role in SAMPLE_ROLES else "this_work",
-            "application": str(s.get("application") or "").strip(),
-            "evidence": str(s.get("evidence") or "").strip(),
-            "passage": _as_int(s.get("passage")),
-        })
-        for a in aliases:
-            if a not in entry["aliases"]:
-                entry["aliases"].append(a)
-    return {"paper_type": str(raw.get("paper_type") or ""), "samples": list(by_name.values())}
+    return {"paper_type": str(raw.get("paper_type") or ""),
+            "samples": parse_polymers(raw, key="samples")}
 
 def own_samples(inventory: Dict[str, Any]) -> List[Dict[str, Any]]:
-    return [s for s in inventory["samples"] if s["role"] == "this_work"]
+    """Samples whose values step 2 extracts: this_work and control (§4)."""
+    return [s for s in inventory["samples"] if s["role"] in ("this_work", "control")]
 
 # Step 2: per-sample passage selection + prompt
 _DASHES = dict.fromkeys(map(ord, "−–—‐‑"), "-")

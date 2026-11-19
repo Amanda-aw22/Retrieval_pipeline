@@ -14,3 +14,5 @@ Extract property records for the TARGET SAMPLE ONLY:
   Read tables carefully: take only the row / column that belongs to the target.
 - If the passages report nothing for the target, return an empty `records` list.
 - Put the passage number of each quote in `passage`.
+- The polymer list (§0) is already known: return `"polymers": []` and only
+  fill `records`.

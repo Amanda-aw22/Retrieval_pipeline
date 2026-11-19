@@ -1,10 +1,12 @@
 """Schema-free property-record extraction.
 
-One record per reported value: sample, property (umbrella name), value, unit,
+The LLM lists every candidate polymer of a paper and one record per reported
+value: sample (= a listed polymer), property (umbrella name), value, unit,
 test condition, application, verbatim evidence and its location. The LLM
 instructions live in property_record_instructions.md; this module builds the
 prompt, then validates the answer and fills page / section / heading from the
-cited passage so locations never depend on the LLM.
+cited passage so locations never depend on the LLM. build_polymer_view()
+groups the records under their polymers for the output.
 """
 from __future__ import annotations
 
@@ -46,18 +48,33 @@ TEXT_FIELDS = ["sample", "material_class", "property", "property_as_written",
                "value", "unit", "test_condition", "application", "evidence", "sample_evidence"]
 REQUIRED_FIELDS = ("sample", "property", "value", "evidence")
 DERIVATIONS = {"stated", "positional", "cross_passage", "corrected", "inferred"}
-# Only this paper's own materials are kept. Answers that still tag records with
-# a non-this-work role (older prompt versions, or the LLM ignoring §4) are dropped.
-EXCLUDED_ROLES = {"control", "comparison", "reference", "prior_work"}
+# Values of this paper's own and control polymers are kept; records still
+# tagged as other groups' work (older prompts, or the LLM ignoring §4) are dropped.
+EXCLUDED_ROLES = {"prior_work"}
+POLYMER_ROLES = ("this_work", "control", "prior_work")
+# Other wordings of a role. Comparison / reference / commercial polymers are
+# controls: they are kept as candidates and their values are extracted.
+ROLE_ALIASES = {"comparison": "control", "reference": "control", "commercial": "control",
+                "benchmark": "control", "baseline": "control", "standard": "control",
+                "own": "this_work", "this work": "this_work", "variant": "this_work",
+                "prior work": "prior_work", "literature": "prior_work", "cited": "prior_work"}
+POLYMER_FIELDS = ["name", "aliases", "role", "role_as_written", "material_class", "description",
+                  "application", "evidence", "passage"]
 # Paper-level metadata from Phase I (cumulative_metadata.jsonl), when available.
 PAPER_META_FIELDS = ["doi", "title", "year", "retrieval_source"]
-CSV_COLUMNS = ["paper_id", *PAPER_META_FIELDS, "paper_type", "sample", "material_class", "property",
+CSV_COLUMNS = ["paper_id", "source_path", *PAPER_META_FIELDS, "paper_type", "polymer", "role",
+               "material_class", "has_properties", "n_properties", "property",
                "property_as_written", "value", "unit", "test_condition", "application",
                "derivation", "flags",
                "evidence", "page", "section", "heading", "passage", "evidence_verified",
                "value_in_evidence", "unit_in_evidence",
                "sample_evidence", "sample_page", "sample_evidence_verified",
                "condition_evidence", "condition_evidence_verified"]
+POLYMER_CSV_COLUMNS = ["paper_id", "source_path", *PAPER_META_FIELDS, "paper_type", "polymer",
+                       "aliases", "role", "role_as_written", "material_class", "description",
+                       "application", "has_properties", "n_properties", "properties", "source",
+                       "evidence", "passage", "page", "section", "heading", "evidence_verified",
+                       "flags"]
 
 _SECTION_TITLES = {"front": "Front matter", "abstract": "Abstract",
                    "introduction": "Introduction", "experimental": "Experimental",
@@ -270,7 +287,7 @@ def normalize_records(raw: Dict[str, Any], paper_id: str,
         _check(rec, r, index)
         out.append(rec)
     return {"paper_id": paper_id, "paper_type": str(raw.get("paper_type") or ""),
-            "records": out}
+            "polymers": parse_polymers(raw), "records": out}
 
 def normalize_records_fulltext(raw: Dict[str, Any], paper_id: str,
                                pages: Sequence[str],
@@ -281,23 +298,137 @@ def normalize_records_fulltext(raw: Dict[str, Any], paper_id: str,
     the LLM never saw) and then against the raw pages."""
     return normalize_records(raw, paper_id, paras, umbrella, pages=pages)
 
+# Polymer view: every candidate polymer, with its records as properties
+def parse_polymers(raw: Dict[str, Any], key: str = "polymers") -> List[Dict[str, Any]]:
+    """Clean the candidate list (`polymers`, or method C's `samples`). Entries
+    with the same name are folded into one (aliases unioned)."""
+    by_name: Dict[str, Dict[str, Any]] = {}
+    for s in raw.get(key) or []:
+        if not isinstance(s, dict) or not str(s.get("name") or "").strip():
+            continue
+        name = " ".join(str(s["name"]).split())
+        written = str(s.get("role") or "").strip()
+        role = written.lower().replace("-", "_")
+        role = role if role in POLYMER_ROLES else ROLE_ALIASES.get(role.replace("_", " "), "")
+        if not role:      # unknown wording: keep the candidate, guess from the word
+            role = ("control" if re.search(r"control|compar|refer|commerc|bench", written, re.I)
+                    else "prior_work" if re.search(r"prior|literat|cite|previous", written, re.I)
+                    else "this_work")
+        entry = by_name.setdefault(name, {
+            "name": name, "aliases": [], "role": role, "role_as_written": written,
+            **{k: str(s.get(k) or "").strip()
+               for k in ("material_class", "description", "application", "evidence")},
+            "passage": _as_int(s.get("passage")),
+        })
+        for a in s.get("aliases") or []:
+            a = " ".join(str(a).split())
+            if a and a != name and a not in entry["aliases"]:
+                entry["aliases"].append(a)
+    return list(by_name.values())
+
+def _key(s: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", _norm(s))
+
+_RECORD_ONLY = [f for f in CSV_COLUMNS if f not in
+                ("paper_id", "source_path", *PAPER_META_FIELDS, "paper_type", "polymer",
+                 "role", "material_class", "has_properties", "n_properties")]
+
+def build_polymer_view(paper_id: str, paper_type: str, polymers: Sequence[Dict[str, Any]],
+                       records: Sequence[Dict[str, Any]], index: "TextIndex",
+                       source_path: str = "") -> Dict[str, Any]:
+    """One entry per candidate polymer, each with the records whose `sample`
+    is its name or an alias. Every candidate is kept, whatever its role and
+    whether or not it has records (has_properties=false, properties=[]).
+    A record matching no candidate adds a polymer (source "records", flagged)
+    so no value is lost; only records of prior_work polymers are dropped (§4).
+    Each entry carries paper_id, source_path and the evidence location."""
+    out: List[Dict[str, Any]] = []
+    lookup: Dict[str, Dict[str, Any]] = {}
+    no_ev = {"found": False, "passage": 0, "page": "", "section": "", "heading": ""}
+    for p in polymers:
+        ev = index.find(p["evidence"], p["passage"]) if p["evidence"] else no_ev
+        entry = {"paper_id": paper_id, "source_path": source_path,
+                 **{k: p.get(k, "") for k in POLYMER_FIELDS},
+                 "passage": ev["passage"] or p["passage"], "page": ev["page"],
+                 "section": ev["section"], "heading": ev["heading"],
+                 "evidence_verified": ev["found"], "source": "candidate_list",
+                 "flags": "" if ev["found"] else
+                          ("evidence_not_found" if p["evidence"] else "evidence_missing"),
+                 "properties": []}
+        out.append(entry)
+        for n in [p["name"], *p["aliases"]]:
+            lookup.setdefault(_key(n), entry)
+    dropped = 0
+    for r in records:
+        entry = lookup.get(_key(r["sample"]))
+        if entry is None:
+            ev = (index.find(r["sample_evidence"]) if r.get("sample_evidence") else no_ev)
+            entry = {"paper_id": paper_id, "source_path": source_path,
+                     "name": r["sample"], "aliases": [], "role": "this_work", "role_as_written": "",
+                     "material_class": r.get("material_class", ""), "description": "",
+                     "application": r.get("application", ""),
+                     "evidence": r.get("sample_evidence", ""), "passage": ev["passage"],
+                     "page": ev["page"], "section": ev["section"], "heading": ev["heading"],
+                     "evidence_verified": ev["found"], "source": "records",
+                     "flags": "not_in_candidate_list", "properties": []}
+            out.append(entry)
+            lookup[_key(r["sample"])] = entry
+        if entry["role"] == "prior_work":
+            dropped += 1
+            continue
+        entry["properties"].append({k: r[k] for k in r if k not in ("sample", "material_class")})
+    for e in out:
+        e["has_properties"] = bool(e["properties"])
+        e["n_properties"] = len(e["properties"])
+        e["properties"] = e.pop("properties")          # keep the list as the last key
+    return {"paper_id": paper_id, "source_path": source_path, "paper_type": paper_type,
+            "n_polymers": len(out),
+            "n_polymers_with_properties": sum(bool(e["properties"]) for e in out),
+            "n_properties": sum(e["n_properties"] for e in out),
+            "n_dropped_prior_work_records": dropped,
+            "polymers": out}
+
+def flat_records(paper: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Back to one dict per record (sample = polymer name), for evaluation."""
+    if "polymers" not in paper or "records" in paper:      # older flat output
+        return list(paper.get("records") or [])
+    return [{**r, "sample": p["name"], "role": p["role"], "material_class": p["material_class"]}
+            for p in paper["polymers"] for r in p["properties"]]
+
 # Output
 def write_outputs(papers: Sequence[Dict[str, Any]], out_dir: Path) -> Tuple[Path, Path]:
-    """records.jsonl (one line per paper) + records.csv (one row per record;
-    papers without records get one row with empty record fields)."""
+    """records.jsonl: one line per paper -> polymers -> properties.
+    polymers.csv: one row per candidate polymer.
+    records.csv: one row per property; a polymer without properties gets one
+    row with empty property fields, a paper without polymers one empty row."""
     out_dir.mkdir(parents=True, exist_ok=True)
     jsonl, csv_path = out_dir / "records.jsonl", out_dir / "records.csv"
     with open(jsonl, "w", encoding="utf-8") as f:
         for p in papers:
             f.write(json.dumps(p, ensure_ascii=False) + "\n")
-    with open(csv_path, "w", encoding="utf-8", newline="") as f:
+    with open(csv_path, "w", encoding="utf-8", newline="") as f, \
+         open(out_dir / "polymers.csv", "w", encoding="utf-8", newline="") as fp:
         w = csv.DictWriter(f, fieldnames=CSV_COLUMNS)
+        wp = csv.DictWriter(fp, fieldnames=POLYMER_CSV_COLUMNS)
         w.writeheader()
+        wp.writeheader()
         for p in papers:
-            base = {"paper_id": p["paper_id"], "paper_type": p.get("paper_type", ""),
+            base = {"paper_id": p["paper_id"], "source_path": p.get("source_path", ""),
+                    "paper_type": p.get("paper_type", ""),
                     **{k: p.get(k, "") for k in PAPER_META_FIELDS}}
-            if not p["records"]:
+            if not p["polymers"]:
                 w.writerow(base)
-            for r in p["records"]:
-                w.writerow({**base, **{k: r.get(k, "") for k in CSV_COLUMNS if k in r}})
+            for pol in p["polymers"]:
+                head = {**base, "polymer": pol["name"], "role": pol["role"],
+                        "material_class": pol["material_class"],
+                        "has_properties": pol["has_properties"], "n_properties": pol["n_properties"]}
+                wp.writerow({**head, "aliases": " | ".join(pol["aliases"]),
+                             "properties": " | ".join(dict.fromkeys(r["property"] for r in pol["properties"])),
+                             **{k: pol.get(k, "") for k in ("role_as_written", "description",
+                                "application", "source", "evidence", "passage", "page", "section",
+                                "heading", "evidence_verified", "flags")}})
+                if not pol["properties"]:
+                    w.writerow(head)
+                for r in pol["properties"]:
+                    w.writerow({**head, **{k: r.get(k, "") for k in _RECORD_ONLY}})
     return jsonl, csv_path

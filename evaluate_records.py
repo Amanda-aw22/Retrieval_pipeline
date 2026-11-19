@@ -29,6 +29,8 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Dict, List, Set, Tuple
 
+from extract_lib.record_extract import flat_records   # records.jsonl -> one row per record
+
 ROOT = Path(__file__).resolve().parent
 TP = ROOT / "tests" / "polymer"
 
@@ -92,7 +94,7 @@ def load_records(path: Path) -> List[dict]:
         if not line.strip():
             continue
         paper = json.loads(line)
-        for r in paper["records"]:
+        for r in flat_records(paper):
             rows.append({**r, "paper_id": paper["paper_id"],
                          "paper_type": (paper.get("paper_type") or "").lower()})
     return rows
@@ -188,7 +190,9 @@ def evaluate(topics: List[str], out_dir: Path) -> None:
             "LEAK_review_records": sum(r["paper_type"] == "review" for r in rows),
             "LEAK_intro_section": sum(r.get("section") == "introduction" for r in rows),
             "LEAK_citation_in_evidence": sum(bool(_CITATION_RE.search(r["evidence"])) for r in rows),
-            "LEAK_control_like_sample": sum(bool(_CONTROL_RE.search(r["sample"])) for r in rows),
+            # controls are extracted on purpose now; count only untagged ones
+            "LEAK_control_like_sample": sum(bool(_CONTROL_RE.search(r["sample"]))
+                                            and r.get("role") != "control" for r in rows),
             "LEAK_outside_main_text": sum(bool(r.get("evidence_verified")) and not r.get("section")
                                           for r in rows),
             "unit_filled": pct(sum(bool(r["unit"]) for r in rows), n),

@@ -1,5 +1,6 @@
-"""Extract property records (sample / property / value / unit / condition /
-application + verbatim evidence and location) from every PDF in a folder.
+"""For every PDF in a folder, list all candidate polymers and attach to each
+its property records (property / value / unit / condition / application +
+verbatim evidence and location).
 
 Three methods share the record format, the rules
 (extract_lib/property_record_instructions.md) and the post-processing:
@@ -26,8 +27,13 @@ Phase I hand-off (optional):
   --metadata FILE  cumulative_metadata.jsonl from iterative_expand.py: adds
                    doi / title / year / retrieval_source to every paper
 
-Outputs (--out_dir): records.jsonl, records.csv; method C also writes
-samples/<paper_id>.json (step 1), samples.csv and conflicts.csv.
+Outputs (--out_dir):
+  records.jsonl  one line per paper: polymers[] (name, aliases, role, ...,
+                 evidence) each with properties[] (one record per value)
+  polymers.csv   one row per candidate polymer (also those without values)
+  records.csv    one row per property record, polymer columns repeated
+  method C also writes samples/<paper_id>.json (step 1), samples.csv and
+  conflicts.csv.
 
 Examples:
   python extract_property_records.py --pdf_dir data/seeds_batteries --out_dir OUT
@@ -53,6 +59,8 @@ from extract_lib.pdf_io import extract_pdf_blocks, extract_pdf_text
 from extract_lib.property_vocab import render_vocab_section
 from extract_lib.record_extract import (
     PAPER_META_FIELDS,
+    TextIndex,
+    build_polymer_view,
     build_record_prompt,
     load_umbrella_map,
     normalize_records,
@@ -184,8 +192,10 @@ def _passages(pdf: Path):
     return record_passages(blocks if blocks else extract_pdf_text(pdf))
 
 def _report(i: int, n: int, paper_id: str, rec: Dict[str, Any]) -> None:
-    ok = sum(r["evidence_verified"] for r in rec["records"])
-    print(f"[{i}/{n}] ✅ {paper_id}: {len(rec['records'])} records ({ok} evidence verified)")
+    ok = sum(r["evidence_verified"] for p in rec["polymers"] for r in p["properties"])
+    print(f"[{i}/{n}] ✅ {paper_id}: {rec['n_polymers']} polymers "
+          f"({rec['n_polymers_with_properties']} with properties), "
+          f"{rec['n_properties']} records ({ok} evidence verified)")
 
 # Methods A / B
 def run_single_call(args, llm: LLM, pdfs: List[Path], vocab: Vocab) -> List[Dict[str, Any]]:
@@ -205,8 +215,11 @@ def run_single_call(args, llm: LLM, pdfs: List[Path], vocab: Vocab) -> List[Dict
         if raw is None:
             print(f"[{i}/{len(pdfs)}] ❌ no usable answer: {pid}")
             continue
-        rec = (normalize_records_fulltext(raw, pid, pages, paras, vocab.umbrella)
-               if args.method == "A" else normalize_records(raw, pid, paras, vocab.umbrella))
+        flat = (normalize_records_fulltext(raw, pid, pages, paras, vocab.umbrella)
+                if args.method == "A" else normalize_records(raw, pid, paras, vocab.umbrella))
+        index = TextIndex(paras, pages if args.method == "A" else None)
+        rec = build_polymer_view(pid, flat["paper_type"], flat["polymers"], flat["records"], index,
+                                 source_path=str(pdf.resolve()))
         papers.append(rec)
         _report(i, len(pdfs), pid, rec)
     return papers
@@ -260,7 +273,8 @@ def run_sample_first(args, llm: LLM, pdfs: List[Path],
             print(f"[{i}/{len(pdfs)}] 📝 {pid}: {len(own_samples(inv))} sample prompts")
             continue
         records, conf = merge_sample_records(per_sample)
-        rec = {"paper_id": pid, "paper_type": inv.get("paper_type", ""), "records": records}
+        rec = build_polymer_view(pid, inv.get("paper_type", ""), inv["samples"], records,
+                                 TextIndex(paras), source_path=str(pdf.resolve()))
         papers.append(rec)
         conflicts += [{"paper_id": pid, **c} for c in conf]
         _report(i, len(pdfs), pid, rec)

@@ -4,9 +4,44 @@ These rules are shared by every extraction method (A full text, B sectioned
 passages, C sample-first). Each method prepends a short "INPUT" section from
 extract_lib/method_instructions/ that describes what text you are given.
 
-Task: from ONE research paper, extract every property measurement the paper
-reports for its own polymers / samples, as one record per measured value.
+Task: from ONE research paper,
+1. list every candidate polymer the paper mentions (§0), whether or not any
+   property value is reported for it, and
+2. extract every property measurement reported for the polymers prepared or
+   measured in THIS paper, as one record per measured value, each linked to
+   one polymer of the list.
 Return a single JSON object (format in §6).
+
+## 0. Candidate polymers
+
+One entry per distinct polymer or polymer-based material (formulation,
+composite, blend, network, electrolyte membrane) the paper mentions.
+
+- Include polymers that have no reported values: polymers that are only
+  synthesized, characterized qualitatively, proposed, or mentioned as related
+  materials.
+- Variants are separate entries when the paper names or measures them
+  separately: different formulations, compositions, molecular weights,
+  crosslink ratios or processing (e.g. `MLCE-1`, `MLCE-2`, `MLCE-3`;
+  `PTA ([TA]0/[TfOH] = 50)` and `PTA ([TA]0/[TfOH] = 1000)`).
+- One umbrella name per polymer: its full name, abbreviation, code and any
+  other wording of the SAME material are `aliases` of one entry, never
+  separate entries. Use the paper's most specific code as `name`.
+- Reagents are not candidates: monomers, crosslinkers, initiators,
+  catalysts, salts, solvents, small-molecule additives, inorganic fillers.
+  A polymer used as a component or matrix (e.g. the PEO in a blend) is a
+  candidate.
+
+| field | what to put |
+|---|---|
+| `name` | Canonical polymer name / code as used in the paper. |
+| `aliases` | Every other way the paper refers to this exact material. `[]` if none. |
+| `description` | One line: what it is and what distinguishes it from the other entries (composition, ratio, Mn, processing). |
+| `material_class` | Short class, e.g. `imine vitrimer solid polymer electrolyte`. |
+| `role` | `this_work`: the material the paper proposes, and its variants.<br>`control`: comparison materials prepared or measured in this paper (non-dynamic or component-missing analogues, reference polymers such as PEO, commercial polymers it tests).<br>`prior_work`: polymers from other studies (Introduction, cited text, literature rows of comparison tables). |
+| `application` | Application the paper states for this polymer, `""` if none. |
+| `evidence` | Verbatim quote (≤ 40 words) that defines or introduces the polymer. |
+| `passage` | Passage number of that quote (`0` when the text has no passage numbers). |
 
 ## 1. What is one record
 
@@ -22,7 +57,7 @@ or average values; record what the paper states.
 
 | field | what to put | if not reported |
 |---|---|---|
-| `sample` | The specific polymer / sample / formulation the value belongs to, using the paper's own name or code, plus the distinguishing parameter if the paper uses one (e.g. `PTA ([TA]0/[TfOH] = 50)`, `MLCE-2`, `V-SPE-PEG`). | never empty — skip the value if you cannot tell which sample it belongs to |
+| `sample` | The polymer the value belongs to: exactly the `name` of one entry of `polymers` (§0), even when the sentence uses one of its aliases. | never empty — skip the value if you cannot tell which polymer it belongs to |
 | `material_class` | Short description of what the sample is (e.g. `poly(disulfide) supramolecular polymer`, `imine vitrimer solid polymer electrolyte`). | `""` |
 | `property` | Umbrella property name in snake_case (see §3). | never empty |
 | `property_as_written` | The property exactly as the paper words it (e.g. `Td5%`, `breaking strength`). | `""` |
@@ -69,17 +104,18 @@ in `test_condition` or `sample` instead:
 
 ## 4. Whose values to extract
 
-- Extract values ONLY for THIS paper's own materials, including their
-  variants (different formulations, molecular weights, compositions or
-  processing of the material the paper proposes, e.g. `MLCE-1/2/3`,
-  `PTA` at different [TA]0/[TfOH]).
-- Do NOT extract values of control / comparison samples, even when the
-  authors prepared or measured them in this paper: non-dynamic or
-  component-missing analogues made only to show the effect of the design,
-  plain reference polymers (e.g. PEO), liquid electrolytes, commercial
-  products or benchmarks (e.g. a commercial tape). Words such as "control",
-  "reference", "compared with", "without", "pristine" usually mark them.
-- Do NOT extract values the paper attributes to other work: Introduction /
+- Extract values for every polymer with role `this_work` or `control`: the
+  paper's own materials and their variants (e.g. `MLCE-1/2/3`, `PTA` at
+  different [TA]0/[TfOH]), and the comparison polymers the authors prepared or
+  measured in this paper (non-dynamic or component-missing analogues,
+  reference polymers such as PEO, commercial polymers). Assign each value to
+  the right polymer: words such as "control", "reference", "compared with",
+  "without", "pristine" usually mark the control.
+- Do NOT extract values of materials that are not polymers (liquid
+  electrolytes, inorganic benchmarks, a commercial tape that is not a listed
+  polymer).
+- Do NOT extract values the paper attributes to other work (`prior_work`
+  polymers): Introduction /
   background text and sentences with citation markers ([12], "et al.",
   "has been reported") that describe other groups'
   materials, and literature rows of comparison tables (keep only the row for
@@ -89,7 +125,8 @@ in `test_condition` or `sample` instead:
 - Synthesis parameters (reaction time, feed ratio, curing temperature) are not
   property records; use them in `sample` or `test_condition` only when they
   identify the sample or the measurement.
-- Review articles: extract only values the review itself measured. If it only
+- Review articles: list the polymers it discusses (`prior_work`) in
+  `polymers`; extract only values the review itself measured. If it only
   summarizes other papers, return an empty `records` list.
 
 ## 5. Empty is better than wrong
@@ -105,6 +142,11 @@ Return ONLY this JSON object (no Markdown, no commentary):
 {
   "paper_id": "<given paper_id>",
   "paper_type": "research | review",
+  "polymers": [
+    {"name": "", "aliases": [], "description": "", "material_class": "",
+     "role": "this_work | control | prior_work", "application": "",
+     "evidence": "", "passage": 0}
+  ],
   "records": [
     {
       "sample": "",
@@ -145,5 +187,7 @@ non-dynamic control C-P2 broke at 2.3 MPa." The abstract calls the P-series
  "derivation": ["positional", "cross_passage"]}
 ```
 
-P1 and P3 get their own records the same way. The 2.3 MPa of the non-dynamic
-control C-P2 is NOT extracted (§4).
+P1 and P3 get their own records the same way. `polymers` lists P1, P2, P3
+(`this_work`) and C-P2 (`control`); the 2.3 MPa of C-P2 is extracted as a
+record with `"sample": "C-P2"`. A polymer the introduction cites from another
+group would be listed as `prior_work` with no records.

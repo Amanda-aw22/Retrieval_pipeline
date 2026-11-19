@@ -189,16 +189,41 @@ Example (trial battery schema): 4 property fields (`ionic_conductivity`,
 
 ## 5. Phase II — property-record extraction ✅
 
-### 5.1 Output record
+### 5.1 Output: polymers, each with its properties
 
-One record = one value of one property for one sample under one test condition.
-Values from controls, prior work (Introduction or cited text), and reagents are **not** extracted.
+The output is organized by polymer. For each paper, the LLM lists **every
+candidate polymer** the paper mentions, whether or not a value is reported for
+it, and links each property record to one polymer:
+
+```text
+paper (paper_id, source_path, doi, title, year, retrieval_source, paper_type,
+       n_polymers, n_polymers_with_properties, n_properties)
+ └─ polymers[]   paper_id, source_path, name, aliases, role, role_as_written,
+                 material_class, description, application,
+                 evidence + passage, page, section, heading, evidence_verified,
+                 source, flags, has_properties, n_properties
+     └─ properties[]   one record per value (fields below); [] when has_properties=false
+```
+
+| Polymer field | Content |
+|---|---|
+| `paper_id`, `source_path` | the paper and the absolute path of its PDF, repeated on every polymer |
+| `name`, `aliases` | one umbrella name per polymer; every other wording of the same material is an alias |
+| `role`, `role_as_written` | `this_work` (the paper's material and its variants) · `control` (comparison, reference and commercial polymers prepared or measured in this paper) · `prior_work` (other groups' polymers). Other wordings (`comparison`, `reference`, `commercial`, `benchmark`, …) are mapped to `control`; the LLM's word is kept in `role_as_written` |
+| `evidence`, `passage`, `page`, `section`, `heading`, `evidence_verified` | verbatim quote that introduces the polymer and where it is, checked against the PDF (no page + flag `evidence_not_found` when the quote is not verbatim) |
+| `has_properties`, `n_properties`, `properties` | `false`, `0`, `[]` for a candidate without extracted values; it is kept in the output |
+| `source` | `candidate_list` (listed by the LLM) or `records` (a record named a polymer missing from the list; flagged `not_in_candidate_list`) |
+
+- **Which polymers have properties:** properties are extracted for `this_work` and `control` polymers. `prior_work` polymers are listed with no properties. No candidate is discarded, whatever its role.
+- **What is not a candidate:** reagents (monomers, crosslinkers, initiators, salts, solvents, fillers) are never candidates.
+- **Answers saved before this format** have no candidate list. They still load; their polymers are then built from the records.
+
+One property record = one value of one property for one polymer under one test condition.
 Fields that are not reported stay empty.
 
-| Field | Content |
+| Record field | Content |
 |---|---|
-| `sample`, `material_class` | the paper's own sample name or code, plus its distinguishing parameter |
-| `property` | umbrella name in snake_case (e.g. `tensile_strength`) |
+| `property` | umbrella name in snake_case (e.g. `tensile_strength`); the polymer is the parent entry |
 | `property_as_written` | the paper's wording (e.g. `breaking strength`) |
 | `value`, `unit` | as written; no conversion |
 | `test_condition` | e.g. `30 °C; EIS`, `0.5C; 200 cycles` |
@@ -218,7 +243,7 @@ Different wordings of the same property always map to one umbrella name, and the
 |---|---|---|---|
 | **A — FDE** | Zero-shot Full-Document Extraction | raw page text, no structure labels, one call | 1 |
 | **B — SAPE** (default) | Structure-Aware Passage-Grounded Extraction | numbered passages labeled with page, section, heading, TABLE and "cites prior work"; one call | 1 |
-| **C — EA-2S** | Entity-Anchored Two-Stage Extraction | step 1 lists samples, aliases and roles; step 2 runs one call per own sample, using only passages that mention it; records are merged and conflicts reported | 1 + #samples |
+| **C — EA-2S** | Entity-Anchored Two-Stage Extraction | step 1 lists the candidate polymers, aliases and roles; step 2 runs one call per `this_work` / `control` polymer, using only passages that mention it; records are merged and conflicts reported | 1 + #polymers |
 
 Method-specific input notes: `extract_lib/method_instructions/{A_fulltext, B_sectioned, C1_sample_inventory, C2_sample_properties}.md`.
 
@@ -262,7 +287,9 @@ Useful options:
 | `--no_cache` | in API mode, answers are normally cached under `OUT/responses*` so a rerun only calls the LLM for papers without an answer; this switches that off |
 
 **Outputs:**
-- `records.jsonl` and `records.csv`.
+- `records.jsonl`: one line per paper, with polymers → properties (§5.1).
+- `polymers.csv`: one row per candidate polymer, including polymers without properties. It lists their property names and `n_properties`.
+- `records.csv`: one row per property record, with the polymer columns repeated. A polymer without properties gets one row with empty property fields.
 - In API mode, also `llm_calls*.json`, a call log used for cost.
 - Method C also writes `samples/<paper>.json`, `samples.csv` and `conflicts.csv`.
 
@@ -293,7 +320,7 @@ python evaluate_records.py --base compare_v2 --topics disulfide battery \
   --out_dir tests/polymer/compare_v2/report
 ```
 
-- **Metrics:** volume; grounding (verbatim evidence, page found); leakage (reviews, Introduction text, citations, controls); field completeness; cost (calls, prompt size); cross-method agreement and majority-vote recall; sample binding (strict and loose).
+- **Metrics:** volume; grounding (verbatim evidence, page found); leakage (reviews, Introduction text, citations, control-like names not tagged `control`); field completeness; cost (calls, prompt size); cross-method agreement and majority-vote recall; sample binding (strict and loose).
 - **Human labels:** `adjudication_sheet.csv` has one row per unique value. Labels: `correct` / `wrong_value` / `wrong_sample` / `not_this_work` / `not_a_property`. These labels give true precision, recall and F1.
 
 With a single method, the agreement and sample-binding sections are skipped.
